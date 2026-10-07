@@ -44,6 +44,20 @@ function fakeStorage(seed: Record<string, string> = {}) {
   };
 }
 
+/** Runs `fn` with a `window` whose every storage call throws (private mode / blocked site data). */
+export function withThrowingStorage<T>(fn: () => T): T {
+  const boom = (): never => {
+    throw new Error('storage blocked');
+  };
+  const blocked = { getItem: boom, setItem: boom, removeItem: boom };
+  vi.stubGlobal('window', { localStorage: blocked, sessionStorage: blocked });
+  try {
+    return fn();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+
 /**
  * Runs `fn` with `window.localStorage` / `window.sessionStorage` stubbed by seeded in-memory
  * stores, and always restores the globals afterwards, even if `fn` throws.

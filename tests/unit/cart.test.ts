@@ -309,3 +309,50 @@ describe('lib/storage without a window', () => {
     }).not.toThrow();
   });
 });
+
+describe('cartReducer applyStock', () => {
+  it('CA1 caps or removes lines to what the server reports, without notices', () => {
+    const start: CartModel = {
+      cart: cartOf([
+        [1, 3],
+        [2, 1],
+        [3, 1],
+      ]),
+      notices: [{ kind: 'lineCap' }],
+    };
+    const next = cartReducer(start, {
+      type: 'applyStock',
+      items: [
+        { menuItemId: 1, available: 2 },
+        { menuItemId: 2, available: 0 },
+      ],
+    });
+    expect(next.cart).toEqual(
+      cartOf([
+        [1, 2],
+        [3, 1],
+      ]),
+    );
+    expect(next.notices).toEqual([{ kind: 'lineCap' }]);
+  });
+
+  it('CA1 leaves lines alone when they already fit, and ignores unknown ids', () => {
+    const start: CartModel = { cart: cartOf([[1, 2]]), notices: [] };
+    const next = cartReducer(start, {
+      type: 'applyStock',
+      items: [
+        { menuItemId: 1, available: 5 },
+        { menuItemId: 9, available: 0 },
+      ],
+    });
+    expect(next).toEqual(start);
+  });
+
+  it('treats a negative availability as sold out', () => {
+    const start: CartModel = { cart: cartOf([[1, 2]]), notices: [] };
+    expect(
+      cartReducer(start, { type: 'applyStock', items: [{ menuItemId: 1, available: -1 }] }).cart
+        .lines,
+    ).toEqual([]);
+  });
+});

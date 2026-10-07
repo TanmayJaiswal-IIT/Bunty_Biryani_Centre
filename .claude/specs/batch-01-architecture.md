@@ -330,7 +330,7 @@ There is no OTP or WhatsApp verification in Phase 1 (brief §26). The vendor can
 
 ### 6.12 Order creation algorithm (expands brief §25)
 
-`order.service.createOrder(input, { ip })` runs in one Prisma interactive transaction (Read Committed, 10 s timeout):
+`order.service.createOrder(deps, input, ctx)` runs in one Prisma interactive transaction (Read Committed, 10 s timeout). **(as built, Batch 5)** `deps = { prisma, clock, logger }` and `ctx = { reqId }` (the request id; there is no `ip` parameter, the route's rate limit handles IPs). Batch 5 §4 has the implementation notes (retry classification, one "now" across a deadlock retry):
 
 1. **Idempotency fast path (before the transaction):** if an order with `clientRequestId` exists, return it with `replayed: true` if its phone matches the request; otherwise `409 IDEMPOTENCY_CONFLICT`. This runs before the pause check on purpose (D19): a customer retrying after a network drop gets the order that was placed, even if orders were paused in between.
 2. Read settings. If `ordersPaused` → `409 ORDERS_PAUSED`.
@@ -344,7 +344,7 @@ There is no OTP or WhatsApp verification in Phase 1 (brief §26). The vendor can
 10. **Price check:** `total ≠ expectedTotal` → `409 PRICE_CHANGED` with `{ total }`. The transaction rolls back, so stock is untouched.
 11. **Insert** the order with snapshots (location name, slot time, ETA minutes, item names, unit prices, line totals) and `createdAt = today.instant`. The database fills `orderNumber`.
 12. Commit, return `201` with the public order view.
-13. **Unique-violation fallback:** if the insert fails on `client_request_id` (a concurrent duplicate won the race), the transaction has rolled back; load the winning order and return it as in step 1.
+13. **Unique-violation fallback:** if the insert fails on `client_request_id` (a concurrent duplicate won the race), the transaction has rolled back; load the winning order and return it as in step 1. **(as built)** Any Prisma `P2002` from the insert triggers this re-lookup (`meta.target` isn't parsed, because driver adapters shape it differently); if no order turns up, the error is rethrown.
 14. **Rejection re-check:** if steps 2–11 reject the order with any `AppError`, the transaction has rolled back; look up `clientRequestId` once more before returning the error. If an order now exists, apply step 1's rules (replay when the phone matches, `IDEMPOTENCY_CONFLICT` otherwise); if not, return the original error. Why: a retry that overlaps the original request waits on the original's stock row lock, then sees the original's effects (stock gone, per-phone cap reached) and would otherwise report `OUT_OF_STOCK` or `TOO_MANY_OPEN_ORDERS` for an order that exists. Step 13 only covers duplicates that get as far as the insert. The cost is one indexed read, on rejections only.
 
 Sequence numbers consumed by rolled-back transactions leave gaps (`BB1004` may never exist). This is expected and harmless.
@@ -1115,6 +1115,8 @@ Prisma client queries or tagged-template raw SQL only. No string-built SQL, no `
 
 The brief's separate CART step is the "Your order" section at the top of `/checkout`, where quantities stay editable. One page fewer keeps the order under a minute.
 
+**(as built, Batch 5)** `/` is the only customer route in the entry chunk. `/checkout`, `/order/:orderNumber` and `/track` are `React.lazy` chunks behind a `RouteErrorBoundary` (a failed load offers a full-page reload), and the checkout and order chunks are prefetched before they are needed (Batch 5 §14).
+
 ### 10.2 State and data
 
 - **Server data:** SWR with a thin `api.ts` wrapper that throws `ApiError { status, code, message, details }`. No global-state library.
@@ -1139,7 +1141,7 @@ A loading state (skeleton, not a spinner, for lists), an empty state, an error s
 
 ### 10.5 Budgets (verified in Batch 7)
 
-- Customer first-load JS (route `/`) ≤ **130 KB gzipped**; the admin chunk is lazy-loaded and excluded.
+- Customer first-load JS (route `/`) ≤ **130 KB gzipped**; the admin chunk and the other customer routes are lazy-loaded and excluded. **(as built, Batch 5)** Measure with `NODE_ENV` unset (`env -u NODE_ENV pnpm build` in bash; `Remove-Item Env:NODE_ENV` first in PowerShell): a development `NODE_ENV` makes Vite ship React's development build. Batch 5 measured 123.68 KB gzipped JS (entry chunk, no modulepreload links) and 5.33 KB gzipped CSS.
 - Lighthouse mobile: Performance ≥ 90, Accessibility ≥ 95.
 - Designed at **360 px** wide; no horizontal scroll from 320 px up.
 - Tap targets ≥ 48 px high; form inputs at 16 px font so iOS doesn't zoom.

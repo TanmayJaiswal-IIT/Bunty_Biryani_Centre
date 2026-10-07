@@ -28,6 +28,7 @@ export interface CartApi {
   remove: (menuItemId: number) => void;
   clear: () => void;
   reconcile: (menu: PublicMenu) => void;
+  applyStock: (items: ReadonlyArray<{ menuItemId: number; available: number }>) => void;
   dismissNotices: () => void;
 }
 
@@ -90,6 +91,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const reconcile = useCallback((menu: PublicMenu) => {
     dispatch({ type: 'reconcile', menu });
   }, []);
+  const applyStock = useCallback(
+    (items: ReadonlyArray<{ menuItemId: number; available: number }>) => {
+      dispatch({ type: 'applyStock', items });
+    },
+    [],
+  );
   const dismissNotices = useCallback(() => {
     dispatch({ type: 'dismissNotices' });
   }, []);
@@ -104,9 +111,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
       remove,
       clear,
       reconcile,
+      applyStock,
       dismissNotices,
     }),
-    [model, add, increment, decrement, remove, clear, reconcile, dismissNotices],
+    [model, add, increment, decrement, remove, clear, reconcile, applyStock, dismissNotices],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

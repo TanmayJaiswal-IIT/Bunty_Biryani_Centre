@@ -1,12 +1,13 @@
 import { formatBusinessDate } from '@shared/time.js';
-import { useMemo } from 'react';
-import { useLocation } from 'react-router';
+import { useEffect, useMemo } from 'react';
+import { Link, useLocation } from 'react-router';
 import { Banner } from '../../../components/Banner';
 import { CustomerPage } from '../../../components/CustomerPage';
 import { EmptyState } from '../../../components/EmptyState';
 import { ErrorState } from '../../../components/ErrorState';
 import { Skeleton } from '../../../components/Skeleton';
 import { copy } from '../../../copy';
+import { loadCheckoutPage, prefetch } from '../../../lazy-routes';
 import { isCartEmptyState } from '../cart/cart-empty';
 import { cartView } from '../cart/cart-reducer';
 import { CartBar } from '../cart/CartBar';
@@ -38,6 +39,18 @@ function MenuSkeleton() {
   );
 }
 
+/** The way back to an order already placed, at the end of the menu (Batch 5 §9). */
+function TrackLink() {
+  return (
+    <Link
+      to="/track"
+      className="mt-4 flex min-h-12 items-center justify-center font-semibold text-brand underline underline-offset-2"
+    >
+      {m.trackLink}
+    </Link>
+  );
+}
+
 export function MenuPage() {
   const { cart, notices, add, increment, decrement, dismissNotices } = useCart();
   // Reconciles the cart on every successful fetch (see useMenu).
@@ -46,6 +59,12 @@ export function MenuPage() {
   // here also warms the cache for checkout (§8).
   const delivery = useDeliveryOptions(60_000);
   const location = useLocation();
+
+  // Checkout is its own chunk: start downloading it once there is something to check out.
+  const hasItems = cart.lines.length > 0;
+  useEffect(() => {
+    if (hasItems) prefetch(loadCheckoutPage);
+  }, [hasItems]);
 
   const quantities = useMemo(
     () => new Map(cart.lines.map((line) => [line.menuItemId, line.quantity])),
@@ -94,6 +113,7 @@ export function MenuPage() {
         {pausedBanner}
         <CartNotices notices={notices} onDismiss={dismissNotices} />
         <EmptyState title={m.emptyTitle} message={m.emptyMessage} icon="clock" />
+        <TrackLink />
       </CustomerPage>
     );
   }
@@ -134,6 +154,7 @@ export function MenuPage() {
         </ul>
       ) : null}
       <SoldOutList items={soldOut} />
+      <TrackLink />
       <CartBar count={view.count} subtotal={view.subtotal} paused={data.ordersPaused} />
     </CustomerPage>
   );

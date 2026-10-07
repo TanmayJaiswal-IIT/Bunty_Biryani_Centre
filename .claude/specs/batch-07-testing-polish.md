@@ -89,6 +89,13 @@ Add a test anywhere the matrix finds a gap, in the batch-owned file.
 | C7 | Paused | Helper pauses orders → menu banner; cart bar "Orders are paused"; checkout button disabled. |
 | C8 | Price changed | Open checkout; helper raises A's price; Place order → "Prices changed…" banner and the new total; Place order again → success at the new price. |
 | C9 | Network failure | Abort the first `POST /api/orders` (`route.abort`) → "We couldn't confirm your order…"; Try again → one order. |
+| C10 | Network error, then Try again (as built, Batch 5) | Let the first `POST /api/orders` reach the server but drop the response (`route.fetch` then `route.abort`); change the price before Try again → the confirmation shows the **original** total and the database holds exactly one order (Batch 5 runbook P5b). Also Try again while orders are paused → still the confirmation. |
+| C11 | Double tap, hard | Tap Place order twice and press Enter on the focused button, with `POST /api/orders` delayed → one request or one order; the button shows "Placing order…" and `aria-busy`. (C6 covers a double-click; this adds keyboard and rapid repeats.) |
+| C12 | After success: navigation and Back | After the confirmation, Back goes to the menu with an empty cart (not a stale checkout, not a blank page); the checkout skeleton, not a blank screen, shows during the hand-off. Forward and reload keep the order. |
+| C13 | Track form submit paths | On `/track` and on the order page's inline fallback: submit with Enter and with the button; a bad ID or phone shows field errors and focus; a wrong pair shows the not-found banner; a 429 shows the rate-limit copy; a correct pair opens the order and adds it to "Orders on this phone". |
+| C14 | Order-page refresh | Reload `/order/BB1001` and open it from a stale history entry: it revalidates on mount; mark the order `CANCELLED` in the database, wait for the 60 s refresh (or refocus the tab) → the cancelled banner replaces "ORDER PLACED"; for a `COMPLETED` order the refresh stops. |
+| C15 | Chunk-load failure | Make the checkout chunk (`/assets/CheckoutPage-*.js`) fail with `route.abort` → the route-load error state with a reload action, not a blank page; remove the abort and reload → checkout loads. Same for the order chunk. |
+| C16 | Candidate (not in §14): Try again survives a reload | Only if the frozen request (Batch 5 §7.2) is persisted in `sessionStorage` across a reload or tab discard: drop the first response, reload `/checkout` → the button still reads "Try again"; tapping it opens the original order; exactly one order in the database. |
 
 ### Vendor
 
@@ -106,7 +113,7 @@ Add a test anywhere the matrix finds a gap, in the batch-owned file.
 
 | Metric | Budget | How it's measured |
 |---|---|---|
-| JS for route `/`, gzipped | ≤ 130 KB | `scripts/check-bundle.ts` (below), in CI |
+| JS for route `/`, gzipped | ≤ 130 KB | `scripts/check-bundle.ts` (below), in CI, built with `NODE_ENV` unset (Batch 1 §10.5) |
 | Lighthouse Performance (mobile) | ≥ 90 | DevTools Lighthouse on `pnpm start:local` |
 | Lighthouse Accessibility | ≥ 95 | same run |
 | LCP on a real mid-range Android over 4G | ≤ 2.5 s | Manual M2 |
@@ -119,7 +126,7 @@ Add a test anywhere the matrix finds a gap, in the batch-owned file.
 
 1. Make sure admin code is only in the lazy chunk (the check above).
 2. Switch shared schemas to `zod/mini`, or keep zod out of the menu route by importing schemas only in checkout.
-3. Lazy-load the checkout, order and track routes (keep the menu in the entry).
+3. Lazy-load the checkout, order and track routes (keep the menu in the entry). **(as built)** Already applied in Batch 5, with prefetching (Batch 5 §14); `/` was 123.68 KB gzipped afterwards.
 4. Check fonts: two woff2 files preloaded at most; subsets as in Batch 2 §8.3.
 5. Re-export images smaller.
 
@@ -132,6 +139,7 @@ Check `content-encoding` on `/assets/*.js` and the API through the production-li
 - Lighthouse Accessibility ≥ 95 on `/`, `/checkout`, `/order/:id`, `/track`, `/admin/login`, `/admin`.
 - Keyboard only (desktop): the whole customer flow and the vendor's Today actions are reachable in a sensible order with a visible focus ring.
 - TalkBack on Android: menu item cards, stepper, cart bar, radio groups, field errors and the confirmation order ID read correctly.
+- After Place order, the confirmation moves focus to (or announces) its "ORDER PLACED" heading, so TalkBack users hear that the order went through.
 - 200% browser zoom at 360 px: no clipped text, no lost controls.
 - On every route change, focus moves to the page's `h1` and `document.title` updates (e.g. "Checkout · Bunty Biryani Centre", "Today · BBC Admin").
 - Errors use the danger colour, an icon and text; status chips always have text.
@@ -211,7 +219,7 @@ Record findings in a table below this section (finding, batch, fix, done). Fix a
 ## 14. Definition of done
 
 - [ ] Every row in §3 is covered and passing.
-- [ ] E2E C1–C9 and V1–V5 pass on both viewport projects.
+- [ ] E2E C1–C15 and V1–V5 pass on both viewport projects.
 - [ ] Budgets in §6.1 met (record the measured numbers here).
 - [ ] Accessibility pass (§7) and polish list (§8) done.
 - [ ] Copy signed off by the owner.

@@ -5,14 +5,13 @@ import { toDbDate } from '../../src/server/lib/db-date';
 import type { DeliveryOptions } from '../../src/shared/api-types';
 import { deliveryOptionsSchema } from '../../src/shared/schemas/delivery';
 import { makeApp } from '../helpers/app';
+import { istInstant } from '../helpers/clock';
 import { prisma } from '../helpers/db';
-
-const ist = (hhmm: string) => new Date(`2026-10-04T${hhmm}:00+05:30`).toISOString();
 
 const get = (now: string) => request(makeApp({ now }).app).get('/api/delivery-options');
 
 async function options(hhmm: string): Promise<DeliveryOptions> {
-  const res = await get(ist(hhmm));
+  const res = await get(istInstant(hhmm));
   expect(res.status).toBe(200);
   return res.body as DeliveryOptions;
 }
@@ -98,7 +97,7 @@ describe('GET /api/delivery-options', () => {
   });
 
   it('13.4-9 is not cached', async () => {
-    const res = await get(ist('19:10'));
+    const res = await get(istInstant('19:10'));
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
   });

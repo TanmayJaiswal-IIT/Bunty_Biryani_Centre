@@ -3,7 +3,8 @@ import { EXPRESS_UNAVAILABLE_REASONS } from '../enums.js';
 import { isValidHHmm } from '../time.js';
 
 const id = z.number().int().positive();
-const hhmm = z.string().refine(isValidHHmm, 'Expected HH:mm');
+export const hhmmSchema = z.string().refine(isValidHHmm, 'Expected HH:mm');
+const hhmm = hhmmSchema;
 const fee = z.number().int().min(0);
 
 /**

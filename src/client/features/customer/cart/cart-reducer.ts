@@ -24,6 +24,8 @@ export type CartAction =
   | { type: 'remove'; menuItemId: number }
   | { type: 'clear' }
   | { type: 'reconcile'; menu: PublicMenu }
+  /** The server said how much is left (`OUT_OF_STOCK` / `ITEM_UNAVAILABLE`); the checkout banner carries the message, so no cart notices. */
+  | { type: 'applyStock'; items: ReadonlyArray<{ menuItemId: number; available: number }> }
   | { type: 'dismissNotices' }
   | { type: 'replace'; cart: CartState };
 
@@ -81,6 +83,28 @@ function reconcile(model: CartModel, menu: PublicMenu): CartModel {
   return { cart: { businessDate: cart.businessDate, lines }, notices };
 }
 
+function applyStock(
+  model: CartModel,
+  items: ReadonlyArray<{ menuItemId: number; available: number }>,
+): CartModel {
+  const available = new Map(items.map((i) => [i.menuItemId, i.available]));
+  let changed = false;
+  const lines: CartLine[] = [];
+  for (const line of model.cart.lines) {
+    const left = available.get(line.menuItemId);
+    if (left === undefined || line.quantity <= left) {
+      lines.push(line);
+    } else if (left > 0) {
+      changed = true;
+      lines.push({ ...line, quantity: left });
+    } else {
+      changed = true;
+    }
+  }
+  if (!changed) return model;
+  return { ...model, cart: { ...model.cart, lines } };
+}
+
 export function cartReducer(model: CartModel, action: CartAction): CartModel {
   switch (action.type) {
     case 'add': {
@@ -134,6 +158,8 @@ export function cartReducer(model: CartModel, action: CartAction): CartModel {
       return { cart: EMPTY_CART, notices: [] };
     case 'reconcile':
       return reconcile(model, action.menu);
+    case 'applyStock':
+      return applyStock(model, action.items);
     case 'dismissNotices':
       return { ...model, notices: [] };
     case 'replace':
