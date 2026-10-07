@@ -136,7 +136,7 @@ Service notes:
 - **complete-many:** ids sorted ascending; for each, `applyOrderAction({ status: 'COMPLETED' })`, then `{ paymentStatus: 'COLLECTED' }` if asked; one transaction; returns counts of actual changes.
 - **Menu create:** `sortOrder` = current max + 1, so new items appear last; no stock (`stockDate` null).
 - **Menu delete:** `isActive = false`. Past orders keep their snapshots.
-- **Stock:** `PUT /api/admin/stock` → `inventory.setTodayStock` inside a transaction.
+- **Stock:** `PUT /api/admin/stock` → `inventory.setTodayStock` inside a transaction. **(as built, Batch 5)** It returns `StockRow[]` (`{ id, dailyStock, stockRemaining, stockDate }`), not an admin view; this service re-reads or maps those rows into the `AdminMenuItem` shape the Stock screen needs (the type is defined in Batch 6, not before).
 - **Locations:** names are unique case-insensitively (checked in the service before insert/rename, plus the database unique index). Deactivation is allowed; the UI warns how many active slots it hides.
 - **Slots:** a unique violation → `409 DUPLICATE` (`field: deliveryTime`); `closedToday: true` → `closedOn = today`, `false` → `null`; `openOrdersToday` in the list = today's `ORDER_RECEIVED` orders on that slot.
 - **Settings:** `PATCH` merges with the current row and validates the merged result before writing.

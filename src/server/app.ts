@@ -2,8 +2,14 @@ import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
-import { LOGIN_RATE_LIMIT, type RateLimitRule } from '../shared/limits.js';
+import {
+  LOGIN_RATE_LIMIT,
+  LOOKUP_RATE_LIMIT,
+  ORDER_RATE_LIMIT,
+  type RateLimitRule,
+} from '../shared/limits.js';
 import { loginSchema } from '../shared/schemas/auth.js';
+import { createOrderSchema, lookupSchema } from '../shared/schemas/order.js';
 import type { Clock } from '../shared/time.js';
 import type { Config } from './config.js';
 import type { PrismaClient } from './db.js';
@@ -19,10 +25,13 @@ import { adminAuthHandlers } from './routes/admin/auth.js';
 import { deliveryOptionsHandler } from './routes/delivery.js';
 import { healthHandler } from './routes/health.js';
 import { menuHandler } from './routes/menu.js';
+import { orderHandlers } from './routes/orders.js';
 import { mountClient } from './static.js';
 
 export interface AppLimits {
   login: RateLimitRule;
+  order: RateLimitRule;
+  lookup: RateLimitRule;
 }
 
 export interface AppDeps {
@@ -85,6 +94,15 @@ export function createApp({
   api.get('/health', healthHandler(prisma));
   api.get('/menu', menuHandler(prisma, clock));
   api.get('/delivery-options', deliveryOptionsHandler(prisma, clock));
+
+  const orders = orderHandlers({ prisma, clock, logger });
+  // Counts every attempt (Batch 1 §6.11): generous, because a hostel shares one Wi-Fi IP.
+  const orderLimiter = createLimiter(limits.order ?? ORDER_RATE_LIMIT);
+  api.post('/orders', orderLimiter, validate({ body: createOrderSchema }), orders.create);
+  // Counts failed lookups only (Batch 5 §6): guesses at sequential order numbers fail and use the
+  // allowance up, while the confirmation page's refresh never does.
+  const lookupLimiter = createLimiter(limits.lookup ?? LOOKUP_RATE_LIMIT, { failedOnly: true });
+  api.post('/orders/lookup', lookupLimiter, validate({ body: lookupSchema }), orders.lookup);
 
   const auth = adminAuthHandlers({
     prisma,

@@ -2,7 +2,7 @@ import type { Express } from 'express';
 import { createApp, type AppLimits } from '../../src/server/app';
 import { loadConfig, type Config } from '../../src/server/config';
 import type { PrismaClient } from '../../src/server/db';
-import { silentLogger } from '../../src/server/lib/logger';
+import { createLogger, silentLogger, type Logger } from '../../src/server/lib/logger';
 import { createTestClock, type TestClock } from './clock';
 import { prisma as testPrisma } from './db';
 
@@ -25,6 +25,8 @@ export interface MakeAppOptions {
   config?: Partial<Config>;
   clientDir?: string | null;
   prisma?: PrismaClient;
+  /** Defaults to the silent logger. */
+  logger?: Logger;
 }
 
 export function makeApp(options: MakeAppOptions = {}): {
@@ -38,9 +40,20 @@ export function makeApp(options: MakeAppOptions = {}): {
     prisma: options.prisma ?? testPrisma,
     clock,
     config,
-    logger: silentLogger,
+    logger: options.logger ?? silentLogger,
     limits: options.limits,
     clientDir: options.clientDir ?? null,
   });
   return { app, clock, config };
+}
+
+export type CapturedLine = { level: string; msg: string } & Record<string, unknown>;
+
+/** A real logger that collects its JSON lines in memory, for asserting on log events. */
+export function captureLogger(): { logger: Logger; lines: CapturedLine[] } {
+  const lines: CapturedLine[] = [];
+  const logger = createLogger((line) => {
+    lines.push(JSON.parse(line) as CapturedLine);
+  });
+  return { logger, lines };
 }

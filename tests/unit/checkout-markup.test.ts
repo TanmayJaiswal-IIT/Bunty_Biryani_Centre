@@ -1,12 +1,14 @@
-// Static-markup checks for the checkout form building blocks (Batch 4 Task 4) and the checkout
-// page (Task 6).
+// Static-markup checks for the checkout form building blocks (Batch 4 Task 4), the checkout
+// page (Task 6) and its submission states (Batch 5 Task 7).
 import { createElement as h } from 'react';
 import { SWRConfig } from 'swr';
 import { describe, expect, it } from 'vitest';
 import type { PublicMenu } from '../../src/shared/api-types';
+import type { CreateOrderOutput } from '../../src/shared/schemas/order';
 import { Banner } from '../../src/client/components/Banner';
 import { RadioCard } from '../../src/client/components/RadioCard';
 import { TextField } from '../../src/client/components/TextField';
+import { copy } from '../../src/client/copy';
 import { CART_STORAGE_KEY } from '../../src/client/features/customer/cart/cart-storage';
 import { CartProvider } from '../../src/client/features/customer/cart/CartProvider';
 import type { DetailsForm } from '../../src/client/features/customer/checkout/build-order-request';
@@ -16,12 +18,16 @@ import {
   REMEMBERED_CUSTOMER_KEY,
   serializeDraft,
 } from '../../src/client/features/customer/checkout/checkout-storage';
+import { describeSubmitError } from '../../src/client/features/customer/checkout/error-handling';
+import { PlaceOrderBar } from '../../src/client/features/customer/checkout/PlaceOrderBar';
 import type { Selection } from '../../src/client/features/customer/checkout/selection';
+import { SubmitErrorBanner } from '../../src/client/features/customer/checkout/SubmitErrorBanner';
 import {
   DELIVERY_OPTIONS_KEY,
   deliveryOptionsSwrOptions,
 } from '../../src/client/features/customer/checkout/use-delivery-options';
 import { MENU_KEY } from '../../src/client/features/customer/menu/use-menu';
+import { ApiError } from '../../src/client/lib/api';
 import { closedSlot, opts, type DeliveryOptionsOverride } from '../helpers/delivery-fixtures';
 import { escaped, item, render, withWindowStorage } from '../helpers/markup';
 
@@ -425,6 +431,21 @@ describe('CheckoutPage', () => {
     }
   });
 
+  it('CK3: the not-sent stub is gone; the in-form button is Place order in an enabled fieldset', () => {
+    expect(Object.keys(copy.customer.checkout)).not.toContain('notSent');
+    const html = renderCheckout();
+    expect(html).not.toContain('Nothing has been sent');
+    expect(html).not.toContain(escaped("online ordering isn't switched on yet"));
+    // The sticky bar's button names the form; the in-form one doesn't need to.
+    const inForm = submitButtons(html).filter((b) => !b.includes('form="checkout-form"'));
+    expect(inForm).toHaveLength(1);
+    expect(inForm[0]).toContain('Place order · ₹300');
+    expect(inForm[0]).not.toContain('aria-busy');
+    expect(inForm[0]).not.toMatch(DISABLED_ATTR);
+    // The sections sit in one fieldset that a submission disables; idle, it is enabled.
+    expect(html).toMatch(/<form[^>]*><fieldset(?![^>]*\sdisabled="")[^>]*>/);
+  });
+
   it('a draft with no method (a saved default) still gets the preselection; its details stay', () => {
     // The first visit saved the blank default; on return every slot is closed, so Express is the
     // only possible method (§12) and must be preselected.
@@ -437,5 +458,99 @@ describe('CheckoutPage', () => {
     });
     expect(radio(html, 'deliveryMode', 'EXPRESS')).toContain('checked=""');
     expect(html).toContain('value="Priya Shah"');
+  });
+});
+
+// ---- Submission (Batch 5 §7.2–§7.3) ------------------------------------------------------------
+
+/** The `spinner` icon's path (`components/Icon.tsx`). */
+const SPINNER_PATH = 'M21 12a9 9 0 1 1-6.22-8.56';
+
+const SENT: CreateOrderOutput = {
+  clientRequestId: '11111111-1111-4111-8111-111111111111',
+  deliveryMode: 'BATCH',
+  locationId: 1,
+  slotId: 1,
+  customerName: 'Rahul Verma',
+  customerPhone: '9876543210',
+  addressDetail: null,
+  items: [{ menuItemId: 1, quantity: 2 }],
+  expectedTotal: 300,
+};
+
+describe('PlaceOrderBar', () => {
+  it('CK1: while loading it is busy, disabled and shows the spinner and the caller label', () => {
+    const html = render(
+      h(PlaceOrderBar, {
+        hidden: false,
+        disabled: false,
+        loading: true,
+        label: copy.customer.checkout.placing,
+      }),
+    );
+    const buttons = submitButtons(html);
+    expect(buttons).toHaveLength(1);
+    const [button] = buttons;
+    expect(button).toContain('aria-busy="true"');
+    expect(button).toContain(SPINNER_PATH);
+    // Loading alone locks the button, whatever `disabled` says.
+    expect(button).toMatch(DISABLED_ATTR);
+    expect(button).toContain('Placing order…');
+
+    const idle = render(
+      h(PlaceOrderBar, { hidden: false, disabled: false, loading: false, label: 'x' }),
+    );
+    expect(idle).not.toContain('aria-busy');
+    expect(idle).not.toContain(SPINNER_PATH);
+  });
+});
+
+describe('SubmitErrorBanner', () => {
+  const failureFor = (
+    code: 'SLOT_CLOSED' | 'TOO_MANY_OPEN_ORDERS',
+    details: Record<string, unknown>,
+    contactPhone: string | null = null,
+  ) =>
+    describeSubmitError(new ApiError(409, code, 'server message', details), {
+      request: SENT,
+      options: opts({ contactPhone }),
+    });
+
+  it('CK2: SLOT_CLOSED is an alert with both lines and a Try Express Delivery button', () => {
+    const failure = failureFor('SLOT_CLOSED', { reason: 'CUTOFF_PASSED', expressAvailable: true });
+    const html = render(h(SubmitErrorBanner, { failure, contactPhone: null, onTryExpress: noop }));
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('Orders for MSH — 8:00 PM just closed.');
+    expect(html).toContain('Batch orders for MSH are closed. Express delivery is available.');
+    expect(html).toMatch(/<button type="button"[^>]*>Try Express Delivery<\/button>/);
+    expect(html).not.toContain('tel:');
+  });
+
+  it('CK2: TOO_MANY_OPEN_ORDERS links the help number only when one is set', () => {
+    const contact = '9876543210';
+    const html = render(
+      h(SubmitErrorBanner, {
+        failure: failureFor('TOO_MANY_OPEN_ORDERS', { limit: 3 }, contact),
+        contactPhone: contact,
+        onTryExpress: noop,
+      }),
+    );
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('You already have 3 orders waiting for delivery today.');
+    expect(html).toContain('Need help?');
+    expect(html).toContain('href="tel:9876543210"');
+    expect(html).toContain('Call 98765 43210');
+    expect(html).not.toContain('Try Express Delivery');
+
+    const without = render(
+      h(SubmitErrorBanner, {
+        failure: failureFor('TOO_MANY_OPEN_ORDERS', { limit: 3 }),
+        contactPhone: null,
+        onTryExpress: noop,
+      }),
+    );
+    expect(without).toContain('You already have 3 orders waiting for delivery today.');
+    expect(without).not.toContain('tel:');
+    expect(without).not.toContain('Need help?');
   });
 });

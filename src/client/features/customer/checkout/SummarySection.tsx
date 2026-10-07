@@ -2,7 +2,6 @@ import { formatINR } from '@shared/money.js';
 import type { Totals } from '@shared/pricing.js';
 import { formatTime12h } from '@shared/time.js';
 import type { Ref } from 'react';
-import { Banner } from '../../../components/Banner';
 import { Button } from '../../../components/Button';
 import { copy } from '../../../copy';
 import type { ResolvedSelection } from './selection';
@@ -35,8 +34,9 @@ interface SummarySectionProps {
   resolved: ResolvedSelection | null;
   /** The express ETA text from the delivery options. */
   expressEta: string;
-  notSent: boolean;
   submitDisabled: boolean;
+  /** While the order is being sent: a spinner and `aria-busy`. */
+  loading: boolean;
   submitLabel: string;
   /** Lets the page hide the sticky bar while this button is on screen. */
   submitRef?: Ref<HTMLButtonElement>;
@@ -47,8 +47,8 @@ export function SummarySection({
   totals,
   resolved,
   expressEta,
-  notSent,
   submitDisabled,
+  loading,
   submitLabel,
   submitRef,
 }: SummarySectionProps) {
@@ -71,16 +71,12 @@ export function SummarySection({
       {line ? <p className="mt-2">{line}</p> : null}
       <p className="mt-3 font-semibold">{c.payment}</p>
       <p className="text-sm text-ink-muted">{c.payInCash(formatINR(totals.total))}</p>
-      {notSent ? (
-        <Banner tone="info" className="mt-3">
-          {c.notSent}
-        </Banner>
-      ) : null}
       <Button
         ref={submitRef}
         type="submit"
         fullWidth
         disabled={submitDisabled}
+        loading={loading}
         className="mt-4 min-h-14"
       >
         {submitLabel}
