@@ -36,3 +36,30 @@ export const SESSION_SECONDS = SESSION_DAYS * 24 * 60 * 60;
 
 /** Postgres `int` ceiling; path ids above this are 404 (Batch 1 §8.1). */
 export const MAX_PATH_ID = 2_147_483_647;
+
+// Vendor dashboard and admin screens (Batch 6 §6).
+
+/** Longest order search (`q`) the admin orders list accepts. */
+export const ADMIN_SEARCH_MAX = 20;
+/** Admin orders list cap, newest first. */
+export const ADMIN_ORDERS_LIMIT = 500;
+/** Most orders `complete-many` takes in one request. */
+export const COMPLETE_MANY_MAX = 200;
+/** Most items a bulk stock save takes in one request. */
+export const STOCK_BULK_MAX = 100;
+export const STOCK_MAX = 10_000;
+/** Integer rupees (Rule 1). */
+export const PRICE_MAX = 10_000;
+export const ITEM_NAME_MIN = 2;
+export const ITEM_NAME_MAX = 60;
+export const ITEM_DESCRIPTION_MAX = 200;
+export const IMAGE_URL_MAX = 500;
+export const LOCATION_NAME_MIN = 2;
+export const LOCATION_NAME_MAX = 40;
+export const SORT_ORDER_MAX = 9_999;
+/** Delivery fees in integer rupees. */
+export const FEE_MAX = 500;
+export const ETA_MINUTES_MIN = 1;
+export const ETA_MINUTES_MAX = 180;
+/** Shortest run of trailing digits that matches a phone number in the admin search. */
+export const PHONE_SUFFIX_MIN = 4;

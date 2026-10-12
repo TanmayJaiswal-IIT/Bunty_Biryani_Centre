@@ -1,6 +1,18 @@
 import type { z } from 'zod';
 import type { ErrorCode } from './errors.js';
 import type {
+  adminLocationSchema,
+  adminMenuItemSchema,
+  adminMenuResponseSchema,
+  adminOrdersResponseSchema,
+  adminOrderViewSchema,
+  adminSettingsSchema,
+  adminSlotSchema,
+  completeManyResultSchema,
+  dashboardBatchSchema,
+  dashboardSchema,
+} from './schemas/admin-views.js';
+import type {
   deliveryOptionsSchema,
   deliverySlotOptionSchema,
   expressOptionsSchema,
@@ -39,3 +51,22 @@ export type ExpressOptions = z.output<typeof expressOptionsSchema>;
 export type PublicOrderView = z.output<typeof publicOrderViewSchema>;
 export type PublicOrderItem = PublicOrderView['items'][number];
 export type CreateOrderResponse = z.output<typeof createOrderResponseSchema>;
+
+/** Admin order view: dashboard, orders list and order detail (Batch 1 §8.5). */
+export type AdminOrderView = z.output<typeof adminOrderViewSchema>;
+export type AdminOrderItem = AdminOrderView['items'][number];
+export type AdminOrdersResponse = z.output<typeof adminOrdersResponseSchema>;
+
+/** `GET /api/admin/dashboard`. */
+export type Dashboard = z.output<typeof dashboardSchema>;
+export type DashboardBatch = z.output<typeof dashboardBatchSchema>;
+
+/** `POST /api/admin/orders/complete-many`. */
+export type CompleteManyResult = z.output<typeof completeManyResultSchema>;
+
+/** Admin menu, stock, locations, delivery slots and settings (Batch 1 §8.5). */
+export type AdminMenuItem = z.output<typeof adminMenuItemSchema>;
+export type AdminMenuResponse = z.output<typeof adminMenuResponseSchema>;
+export type AdminLocation = z.output<typeof adminLocationSchema>;
+export type AdminSlot = z.output<typeof adminSlotSchema>;
+export type AdminSettings = z.output<typeof adminSettingsSchema>;
