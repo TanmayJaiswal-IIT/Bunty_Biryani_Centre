@@ -62,7 +62,7 @@ import {
   type Selection,
 } from './selection';
 import { SubmitErrorBanner } from './SubmitErrorBanner';
-import { submitButtonState, submitOrder } from './submit-order';
+import { menuMayReconcile, submitButtonState, submitOrder } from './submit-order';
 import { SummarySection } from './SummarySection';
 import { useDeliveryOptions, type LoadedDeliveryOptions } from './use-delivery-options';
 import { WhereWhenSection } from './WhereWhenSection';
@@ -153,6 +153,9 @@ interface CheckoutFormProps {
    */
   frozen: CreateOrderOutput | null;
   setFrozen: (request: CreateOrderOutput | null) => void;
+  /** In flight: the button spins and the fieldset is disabled. The page owns it for the same reason. */
+  submitting: boolean;
+  setSubmitting: (submitting: boolean) => void;
 }
 
 function CheckoutForm({
@@ -165,6 +168,8 @@ function CheckoutForm({
   onPlaced,
   frozen,
   setFrozen,
+  submitting,
+  setSubmitting,
 }: CheckoutFormProps) {
   const navigate = useNavigate();
   const { cart, notices, increment, decrement, clear, applyStock, dismissNotices } = useCart();
@@ -181,9 +186,8 @@ function CheckoutForm({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [dirty, setDirty] = useState<ReadonlySet<DetailField>>(() => new Set());
   const [typing, setTyping] = useState(false);
-  // In flight: the button spins and the fieldset is disabled. The ref is checked synchronously,
-  // because a second tap can arrive before React re-renders with `submitting` set.
-  const [submitting, setSubmitting] = useState(false);
+  // Checked synchronously, because a second tap can arrive before React re-renders with
+  // `submitting` set.
   const submittingRef = useRef(false);
   /** The last rejection's banner, shown at the top until the next attempt. */
   const [failure, setFailure] = useState<SubmitFailure | null>(null);
@@ -575,19 +579,21 @@ export function CheckoutPage() {
     prefetch(loadOrderPage);
   }, []);
   // Decision 6: after a network error, timeout or 5xx, the exact request (same id, same body) is
-  // kept for "Try again". Any customer edit drops it; background revalidation doesn't. It lives
-  // here, not in the form, so the menu doesn't reconcile the cart while it exists: the customer's
-  // own unconfirmed order may have sold out the cart, and reconciling would empty it and redirect
-  // away, losing Try again (Batch 5 §7.2). Try again then replays the order, or its OUT_OF_STOCK
-  // fixes the cart (applyStock). Once it is dropped, the next fetch reconciles as usual.
+  // kept for "Try again". Any customer edit drops it; background revalidation doesn't. It and the
+  // in-flight flag live here, not in the form, so the menu doesn't reconcile the cart while an order
+  // is being sent or kept: that order may have sold out the cart, and reconciling would empty it
+  // and redirect away, losing Try again (Batch 5 §7.2). Try again then replays the order, or its
+  // OUT_OF_STOCK fixes the cart (applyStock). Afterwards the next fetch reconciles as usual.
   const [frozen, setFrozen] = useState<CreateOrderOutput | null>(null);
-  // Reconciles the cart on every successful fetch (see useMenu), except while a request is frozen.
+  const [submitting, setSubmitting] = useState(false);
+  // Reconciles the cart on every successful fetch (see useMenu), except while an order is in
+  // flight or frozen.
   const {
     data: menu,
     error: menuError,
     isValidating: menuValidating,
     mutate: refreshMenu,
-  } = useMenu({ reconcile: frozen === null });
+  } = useMenu({ reconcile: menuMayReconcile({ submitting, frozen: frozen !== null }) });
   const {
     data: options,
     error: optionsError,
@@ -597,8 +603,8 @@ export function CheckoutPage() {
   // Set by a successful submit just before it clears the cart (Decision 10).
   const [placed, setPlaced] = useState(false);
 
-  // Arriving empty, removing the last line, reconcile emptying it (never while a request is
-  // frozen), another tab emptying it (§5.2).
+  // Arriving empty, removing the last line, reconcile emptying it (never while an order is in
+  // flight or frozen), another tab emptying it (§5.2).
   // Once an order is placed the empty cart is expected: the navigation to the confirmation is on
   // its way (the router commits it in a transition, after the cart clears), and a redirect to the
   // menu from here could win the race. Until it lands the page shows its loading state.
@@ -634,6 +640,8 @@ export function CheckoutPage() {
             }}
             frozen={frozen}
             setFrozen={setFrozen}
+            submitting={submitting}
+            setSubmitting={setSubmitting}
           />
         ) : menuError ? (
           <ErrorState

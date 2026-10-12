@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Built 2026-10-07: lint, typecheck, build and all 440 tests pass (§13 has the numbers). Desktop runbook P1–P17 (§12.5) pending; the phone row is the owner's. Deviations found while building are marked **(as built)**. |
+| Status | Built 2026-10-07: lint, typecheck, build and all 442 tests pass (§13 has the numbers). Desktop runbook P1–P17 with P5b–P5d (§12.5) passed 2026-10-07; the phone check moved to Batch 7 §13 (M8). Deviations found while building are marked **(as built)**. |
 | Depends on | Batch 4 (checkout, `createOrderSchema`, `delivery.service`) |
 | Brief sections | §2 customer 8–10, §3 (customer COD copy), §6 separate orders, §8 server fees, §10 + §11 enforcement, §14 Inventory, §15 Order data, §25 Order creation, §26 Abuse protection |
 | Endpoints | `POST /api/orders`, `POST /api/orders/lookup` |
@@ -135,7 +135,7 @@ This makes "Try again" after a timeout safe: if the first attempt reached the se
 - Button shows a spinner and "Placing order…", `aria-busy`; the form's `fieldset` is disabled so nothing changes mid-flight.
 - Client timeout 15 s (`AbortController`); treated like a network error.
 - **(as built) Try again resends the frozen request.** After a network, timeout or 5xx failure, the exact request (same id, same body) is kept. **Try again** resends it unchanged, even if prices or the cutoff changed in between, so a replay is never turned into `PRICE_CHANGED` or `SLOT_CLOSED` for an order that exists. The button stays enabled for that retry even when orders are now paused or nothing is open: the idempotency check comes before the pause check (D19), so the retry gets the order that was placed. Any customer edit drops the frozen request and clears the network banner with it; from then on the fingerprint decides the id (§7.1).
-- **(as built) No reconcile while a request is frozen.** While a request is frozen, checkout's menu refreshes don't reconcile the cart (`useMenu({ reconcile: false })`; the menu and order pages always reconcile). The customer's own order may have sold out the cart, and reconciling would empty it and redirect to the menu, losing Try again for an order that may exist. Try again then replays the order or, if it wasn't placed, its `OUT_OF_STOCK` fixes the cart (`applyStock`, §7.3). Once the frozen request is dropped, the next fetch reconciles as usual. Runbook P5c.
+- **(as built) No reconcile while an order is in flight or frozen.** While an order is being sent, or a request is frozen for Try again, checkout's menu refreshes don't reconcile the cart (`useMenu({ reconcile: menuMayReconcile({ submitting, frozen }) })`; the menu and order pages always reconcile). The customer's own order may have sold out the cart, and reconciling would empty it and redirect to the menu, losing Try again for an order that may exist. Try again then replays the order or, if it wasn't placed, its `OUT_OF_STOCK` fixes the cart (`applyStock`, §7.3). Afterwards the next fetch reconciles as usual. The in-flight half was added in the Batch 5 follow-ups (2026-10-07): a refresh landing while the first request was still pending could empty the cart before the request failed. Runbook P5c.
 - **(as built) Navigation after success.** `CheckoutPage` holds `placed` and skips its empty-cart `<Navigate to="/">` once an order is placed, so clearing the cart can't race the navigation to the confirmation. While `placed` and the cart is empty it renders the checkout header plus the existing skeleton (`role="status"`), not a blank screen, until the route changes. The draft timer also skips writing once placed.
 - **On success** (`201` or `200`):
   1. add `{ orderNumber, phone, deliveryDate }` to recent orders (§10);
@@ -341,6 +341,7 @@ All integration tests use real Postgres, `seed-initial` data and these items unl
 | P5 | DevTools Offline → Place order → online → Try again | The network banner (focused), the button reads "Try again", then the confirmation. `SELECT count(*) FROM orders` has gone up by exactly 1 |
 | P5b | A DevTools custom throttling profile with 20 000 ms latency → tap Place order → after ~2 s switch to Offline → wait for the network banner → check that a new row exists (if not, the request never left; repeat) → `UPDATE menu_items SET price = price + 10 WHERE name = 'Raita'` → go online → Try again | The confirmation shows the **original** total; the order count went up by exactly 1 |
 | P5c | The 20 000 ms latency profile → dev-only `UPDATE menu_items SET daily_stock=1, stock_remaining=1 WHERE name='Raita'`, and a cart of just 1 Raita → tap Place order → after ~2 s switch to Offline → wait for the network banner → check that a new row exists (if not, repeat) → go online → focus away and back (or wait 60 s) so the menu refreshes | The checkout is still there with "Try again" (Raita isn't removed); tapping it opens the confirmation with the original order; the order count went up by exactly 1 |
+| P5d | (Batch 5 follow-ups) Hold the order's response until the 15 s client timeout; dev-only Raita stock 1 and a cart of just 1 Raita → tap Place order → while "Placing order…" shows, let the menu refresh (return to the tab) → wait for the timeout → Try again | During the wait the cart keeps Raita and the page stays on checkout; then the network banner and "Try again"; Try again opens the confirmation; the order count went up by exactly 1 |
 | P6 | `orders_paused = true`, tap | The paused banner; the button disabled once options refresh. Reset |
 | P7 | MSH `cutoff_time` = 1 minute ago, tap | "Orders for MSH — … just closed." + "Batch orders for MSH are closed. Express delivery is available." + Try Express selects Express MSH |
 | P8 | Express Kanhar; `UPDATE delivery_locations SET is_active=false WHERE name='Kanhar'`, tap | The location-unavailable banner; the location cleared. Reset |
@@ -353,7 +354,7 @@ All integration tests use real Postgres, `seed-initial` data and these items unl
 | P15 | `UPDATE orders SET status='COMPLETED', completed_at=now() WHERE order_number='BB1001'`; open it from /track | "ORDER BB1001" + "Completed"; the 60 s refresh stops |
 | P16 | Another order: `payment_status='COLLECTED'`; a third: `status='CANCELLED'` | "Cash on delivery · Collected"; the danger cancelled banner. Never "Paid" |
 | P17 | 320 px wide, confirmation + track | No horizontal scroll; the ID doesn't overflow |
-| Phone (owner) | Items 1–4 below on a real Android phone (`pnpm dev:server` + `pnpm exec vite --host`) | As listed |
+| Phone (owner) | Items 1–4 below on a real Android phone (`pnpm dev:server` + `pnpm exec vite --host`). **Moved to Batch 7 §13 (M8) on 2026-10-07.** | As listed |
 | Reset | `pnpm db:seed`, then Batch 4's slot/settings reset SQL, `UPDATE delivery_locations SET is_active=true` | |
 
 **Phone (owner):**
@@ -365,14 +366,20 @@ All integration tests use real Postgres, `seed-initial` data and these items unl
 
 `RATE_LIMITED`, `IDEMPOTENCY_CONFLICT` and the server's `VALIDATION_ERROR` can't reasonably be provoked by hand (§7.3).
 
+**(as built) Desktop run, 2026-10-07:** P1–P17, P5b, P5c and P5d passed in desktop Chrome (Claude in Chrome), window about 560 px wide. Adaptations, because DevTools can't be driven from the extension:
+- Offline and lost responses (P5–P5d) were simulated with a page-level `fetch` wrapper for `POST /api/orders`: fail before sending (P5); send, then drop the response (P5b, P5c); send, then hold until the client's 15 s abort (P5d). In P5b–P5d the server had saved the order (201) before the page saw a failure.
+- P17 loaded `/`, `/checkout`, `/order/:n` (a later visit, and the just-placed view via router state) and `/track` in a 320 px same-origin iframe: no element overflowed, and the 40 px order ID was 172 px wide.
+- The run was at 10:15 IST, before express opens, so `express_opens_at` was set to 06:00 for the run, with `contact_phone` set to show the help lines; both were restored.
+- P15's "the 60 s refresh stops" is covered by unit test OS4: the unfocused test window paused SWR polling, so it couldn't be observed. For the same reason the menu refresh in P5c and P5d was triggered by the page becoming visible again.
+
 ## 13. Definition of done
 
 - [x] `inventory.service.ts` complete; the guard test passes; `seed-dev` uses it.
 - [x] `createOrder` follows Batch 1 §6.12 step for step; `POST /api/orders` and lookup match Batch 1 §8.4.
-- [x] All tests in §12.1–§12.4 pass, including the concurrency tests, with the invariant checked after each. **(as built)** `pnpm test`: 34 files, 440 tests (Batch 4 ended at 20 files, 284 tests). `orders.concurrency.test.ts` (11 tests) passed three runs in a row.
-- [ ] Every error code in §7.3 has a tested UI path (manual now, e2e in Batch 7). **(as built)** Unit-tested in `submit-errors.test.ts`; the manual part is runbook P1–P17 (§12.5), still to run.
-- [ ] Desktop runbook P1–P17 (§12.5) passes. **(as built)** Run after the final branch review.
-- [ ] Phone check (§12.5, owner), or moved to Batch 7 §13 as Batches 3 and 4 did.
+- [x] All tests in §12.1–§12.4 pass, including the concurrency tests, with the invariant checked after each. **(as built)** `pnpm test`: 34 files, 442 tests after the follow-ups (Batch 4 ended at 20 files, 284 tests). `orders.concurrency.test.ts` (11 tests) passed three runs in a row.
+- [x] Every error code in §7.3 has a tested UI path (manual now, e2e in Batch 7). **(as built)** Unit-tested in `submit-errors.test.ts`; manually in runbook P5–P13 (2026-10-07). `RATE_LIMITED`, `IDEMPOTENCY_CONFLICT` and the server's `VALIDATION_ERROR` are covered by unit and integration tests only.
+- [x] Desktop runbook P1–P17 (§12.5) passes. **(as built)** Passed 2026-10-07, with P5b, P5c and P5d (see the note under §12.5).
+- [x] Phone check (§12.5, owner), or moved to Batch 7 §13 as Batches 3 and 4 did. **(as built)** Moved to Batch 7 §13 (M8) on 2026-10-07.
 - [x] No name, phone or address in logs.
 - [x] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` pass; `CLAUDE.md` batch table updated. **(as built)** Measured with `NODE_ENV` unset (see §14): the `/` entry chunk is 123.68 KB gzipped JS plus 5.33 KB gzipped CSS, inside the 130 KB budget (Batch 1 §10.5); it was 127.34 KB at the end of Batch 4. `dist/client` contains no `style="` attribute.
 
