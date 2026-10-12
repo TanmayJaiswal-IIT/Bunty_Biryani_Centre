@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../../src/client/lib/api';
 import {
   SUBMIT_TIMEOUT_MS,
+  menuMayReconcile,
   submitButtonState,
   submitOrder,
 } from '../../src/client/features/customer/checkout/submit-order';
@@ -138,5 +139,16 @@ describe('submitButtonState', () => {
     expect(
       submitButtonState({ submitting: false, retrying: false, options: opts(), total }),
     ).toEqual({ disabled: false, loading: false, label: 'Place order · ₹330' });
+  });
+});
+
+describe('menuMayReconcile', () => {
+  // The order in flight (or kept for Try again) may have sold out the cart itself; reconciling
+  // would empty it and redirect away from checkout, losing Try again (Batch 5 §7.2).
+  it('MR1 reconciles only when nothing is in flight and nothing is frozen', () => {
+    expect(menuMayReconcile({ submitting: false, frozen: false })).toBe(true);
+    expect(menuMayReconcile({ submitting: true, frozen: false })).toBe(false);
+    expect(menuMayReconcile({ submitting: false, frozen: true })).toBe(false);
+    expect(menuMayReconcile({ submitting: true, frozen: true })).toBe(false);
   });
 });

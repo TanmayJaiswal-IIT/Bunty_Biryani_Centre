@@ -215,6 +215,7 @@ Record findings in a table below this section (finding, batch, fix, done). Fix a
 | M5 | "Add to Home screen" opens standalone with the right icon and colours |
 | M6 | Carried over from Batch 4 (moved here 2026-10-06): run K14 (Enter / the keyboard's action key moves Name → Mobile number → Room / address, closes the keyboard on Room, submits nothing) and the "Phone" row (repeat K2, K3, K7; the keyboard never covers the field being typed; TalkBack reads a disabled card's reason) from Batch 4 §13.5. Also confirm the sticky Place order bar hides while the in-form button is fully on screen (Batch 4 §5.8) |
 | M7 | Carried over from Batch 3 (moved here 2026-10-06): the "Phone" row of Batch 3 §11.3. Repeat M1, M2 and M6 of that runbook by touch, then with TalkBack on build a cart of 2 Chicken Biryani + 1 Veg Biryani; TalkBack reads "Add Chicken Biryani", "Add one more Chicken Biryani", the quantity, and the cart bar as "Checkout, 3 items, ₹410" |
+| M8 | Carried over from Batch 5 (moved here 2026-10-07): the "Phone (owner)" items 1–4 of Batch 5 §12.5 on a real Android phone (`pnpm dev:server` + `pnpm exec vite --host`): a batch and an express order, each confirmation checked and reloaded; lookup with the wrong phone, then the right one; Offline → Place order → error, online → Try again → exactly one order (`SELECT count(*) FROM orders`); two phones racing for the last item (one gets it, the other sees the sold-out message and an updated cart) |
 
 ## 14. Definition of done
 

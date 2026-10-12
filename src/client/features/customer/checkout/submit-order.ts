@@ -42,6 +42,15 @@ export interface SubmitButtonState {
 }
 
 /**
+ * Whether checkout's menu fetches may reconcile the cart. Not while an order is in flight or kept
+ * for "Try again": that order may have sold out the cart itself, and reconciling would empty it and
+ * redirect away from checkout, losing Try again (Batch 5 §7.2).
+ */
+export function menuMayReconcile(state: { submitting: boolean; frozen: boolean }): boolean {
+  return !state.submitting && !state.frozen;
+}
+
+/**
  * The one button at the end of checkout. While a frozen request is waiting for "Try again" it stays
  * enabled even if orders were paused since: the server checks the id before the pause, so the retry
  * returns the order that was already placed (Batch 5 decision 6).

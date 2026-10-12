@@ -33,7 +33,7 @@ The project is built in batches (brief §31). Do **only the current batch**; don
 | 2 | Project setup, database, migrations + seed, admin authentication | `batch-02-setup-auth.md` | Built 2026-10-04; owner still to run `pnpm admin:create` in PowerShell (spec §13) |
 | 3 | Customer menu + cart | `batch-03-menu-cart.md` | Built 2026-10-04; review gaps (§15) fixed and desktop runbook M1–M13 passed 2026-10-05; phone + TalkBack check moved to Batch 7 §13 (M7) |
 | 4 | Checkout + batch/express delivery selection | `batch-04-checkout-delivery.md` | Built 2026-10-06; desktop runbook K1–K13 passed 2026-10-06; K14 (Enter key) and the phone + TalkBack check moved to Batch 7 §13 (M6) |
-| 5 | Order creation + inventory | `batch-05-orders-inventory.md` | Built 2026-10-07; desktop runbook P1–P17 pending |
+| 5 | Order creation + inventory | `batch-05-orders-inventory.md` | Built 2026-10-07; desktop runbook P1–P17 (+ P5b–P5d) passed 2026-10-07; phone check moved to Batch 7 §13 (M8) |
 | 6 | Vendor dashboard + batch grouping (+ admin menu, stock, delivery settings) | `batch-06-vendor-dashboard.md` | — |
 | 7 | Testing + mobile polish | `batch-07-testing-polish.md` | — |
 | 8 | Deployment + production verification | `batch-08-deployment.md` | — |
