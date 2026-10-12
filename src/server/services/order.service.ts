@@ -76,6 +76,26 @@ function fieldError(field: 'slotId' | 'locationId' | 'items', message: string): 
 }
 
 /**
+ * E4: an express order's delivery window is `createdAt + min` to `createdAt + max` minutes, in IST,
+ * from the ETA the order snapshotted. Null for batch orders. Shared by the customer and admin views.
+ */
+export function expressWindowFor(
+  order: Pick<
+    OrderForView,
+    'deliveryMode' | 'expressEtaMinMinutes' | 'expressEtaMaxMinutes' | 'createdAt'
+  >,
+): { from: string; to: string; etaText: string } | null {
+  const min = order.expressEtaMinMinutes;
+  const max = order.expressEtaMaxMinutes;
+  if (order.deliveryMode !== 'EXPRESS' || min === null || max === null) return null;
+  return {
+    from: addMinutesIST(order.createdAt, min),
+    to: addMinutesIST(order.createdAt, max),
+    etaText: etaText(min, max),
+  };
+}
+
+/**
  * Batch 1 §8.4. Fields are picked one by one, so the internal id, the phone, the request id and
  * the other timestamps can't reach the response. Items follow `order_items.id` (the cart order).
  */
@@ -83,17 +103,6 @@ export function toPublicOrderView(
   order: OrderForView,
   contactPhone: string | null,
 ): PublicOrderView {
-  const min = order.expressEtaMinMinutes;
-  const max = order.expressEtaMaxMinutes;
-  const expressWindow =
-    order.deliveryMode === 'EXPRESS' && min !== null && max !== null
-      ? {
-          from: addMinutesIST(order.createdAt, min),
-          to: addMinutesIST(order.createdAt, max),
-          etaText: etaText(min, max),
-        }
-      : null;
-
   return {
     orderNumber: order.orderNumber,
     status: order.status,
@@ -103,7 +112,7 @@ export function toPublicOrderView(
     deliveryDate: fromDbDate(order.deliveryDate),
     locationName: order.locationName,
     slotDeliveryTime: order.slotDeliveryTime,
-    expressWindow,
+    expressWindow: expressWindowFor(order),
     customerName: order.customerName,
     addressDetail: order.addressDetail,
     items: [...order.items]

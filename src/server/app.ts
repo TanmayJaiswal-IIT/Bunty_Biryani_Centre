@@ -22,6 +22,7 @@ import { requestLog } from './middleware/request-log.js';
 import { requireAdmin } from './middleware/require-admin.js';
 import { validate } from './middleware/validate.js';
 import { adminAuthHandlers } from './routes/admin/auth.js';
+import { mountAdminRoutes } from './routes/admin/index.js';
 import { deliveryOptionsHandler } from './routes/delivery.js';
 import { healthHandler } from './routes/health.js';
 import { menuHandler } from './routes/menu.js';
@@ -134,6 +135,7 @@ export function createApp({
   );
   admin.post('/logout', auth.logoutHandler);
   admin.get('/me', auth.meHandler);
+  mountAdminRoutes(admin, { prisma, clock });
   api.use('/admin', admin);
 
   api.use((_req, _res, next) => next(new AppError('NOT_FOUND', 'Not found.')));

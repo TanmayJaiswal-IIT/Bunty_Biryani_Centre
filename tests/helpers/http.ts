@@ -19,3 +19,22 @@ export async function loginCookie(
   if (!cookie) throw new Error('login did not set a cookie');
   return cookie.split(';')[0] as string;
 }
+
+export interface AdminClient {
+  /** Cookie only: reads need no Origin. */
+  get(path: string): request.Test;
+  /** Cookie + the app's Origin, as the admin browser sends on writes. */
+  send(method: 'post' | 'patch' | 'put' | 'delete', path: string, body?: unknown): request.Test;
+}
+
+/** Logs in as the factory admin (`createAdmin()` must have run) and returns a client that sends the session cookie. */
+export async function adminClient(app: Express): Promise<AdminClient> {
+  const cookie = await loginCookie(app);
+  return {
+    get: (path) => request(app).get(path).set('Cookie', cookie),
+    send: (method, path, body) => {
+      const req = request(app)[method](path).set('Cookie', cookie).set('Origin', APP_ORIGIN);
+      return body === undefined ? req : req.send(body as object);
+    },
+  };
+}
