@@ -28,7 +28,15 @@ export function menuSwrOptions(
  * however many components call this hook. Reconcile is idempotent for a given menu and never
  * changes the menu, so a second instance cannot cause a loop or double notices.
  */
-export function useMenu(): SWRResponse<PublicMenu, ApiError> {
+export interface UseMenuOptions {
+  reconcile?: boolean;
+}
+
+export function useMenu(options: UseMenuOptions = {}): SWRResponse<PublicMenu, ApiError> {
   const { reconcile } = useCart();
-  return useSWR<PublicMenu, ApiError>(MENU_KEY, menuSwrOptions(reconcile));
+  const shouldReconcile = options.reconcile !== false;
+  return useSWR<PublicMenu, ApiError>(
+    MENU_KEY,
+    menuSwrOptions(shouldReconcile ? reconcile : undefined),
+  );
 }

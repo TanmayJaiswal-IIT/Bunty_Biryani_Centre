@@ -16,11 +16,12 @@ interface PlaceOrderBarProps {
    */
   hidden: boolean;
   disabled: boolean;
+  loading?: boolean;
   label: string;
 }
 
 /** Sticky bottom Place order. It submits `#checkout-form` from outside the form element. */
-export function PlaceOrderBar({ hidden, disabled, label }: PlaceOrderBarProps) {
+export function PlaceOrderBar({ hidden, disabled, loading = false, label }: PlaceOrderBarProps) {
   return (
     <div
       hidden={hidden}
@@ -32,6 +33,8 @@ export function PlaceOrderBar({ hidden, disabled, label }: PlaceOrderBarProps) {
           form="checkout-form"
           fullWidth
           disabled={disabled}
+          loading={loading}
+          aria-busy={loading}
           className="min-h-14"
         >
           {label}

@@ -24,6 +24,7 @@ export type CartAction =
   | { type: 'remove'; menuItemId: number }
   | { type: 'clear' }
   | { type: 'reconcile'; menu: PublicMenu }
+  | { type: 'applyStock'; shortItems: { menuItemId: number; available: number }[] }
   | { type: 'dismissNotices' }
   | { type: 'replace'; cart: CartState };
 
@@ -134,6 +135,23 @@ export function cartReducer(model: CartModel, action: CartAction): CartModel {
       return { cart: EMPTY_CART, notices: [] };
     case 'reconcile':
       return reconcile(model, action.menu);
+    case 'applyStock': {
+      const byId = new Map(action.shortItems.map((item) => [item.menuItemId, item.available]));
+      const lines: CartLine[] = [];
+      for (const line of model.cart.lines) {
+        const available = byId.get(line.menuItemId);
+        if (available === undefined) {
+          lines.push(line);
+        } else if (available <= 0) {
+          continue;
+        } else if (line.quantity > available) {
+          lines.push({ ...line, quantity: available });
+        } else {
+          lines.push(line);
+        }
+      }
+      return { ...model, cart: { ...model.cart, lines } };
+    }
     case 'dismissNotices':
       return { ...model, notices: [] };
     case 'replace':
