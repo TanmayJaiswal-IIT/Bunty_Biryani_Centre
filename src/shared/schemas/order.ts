@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import {
+  DELIVERY_MODES,
+  ORDER_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+} from '../enums.js';
+import {
   ADDRESS_MAX,
   MAX_LINES_PER_ORDER,
   MAX_QTY_PER_ITEM,
@@ -7,6 +13,7 @@ import {
   NAME_MIN,
 } from '../limits.js';
 import { normalizeIndianMobile } from '../phone.js';
+import { hhmmSchema } from './delivery.js';
 
 // Messages are customer-facing copy (Batch 4 §4).
 
@@ -61,3 +68,61 @@ export const customerDetailsSchema = z.object({
 export type CreateOrderInput = z.input<typeof createOrderSchema>;
 export type CreateOrderOutput = z.output<typeof createOrderSchema>;
 export type CustomerDetailsInput = z.input<typeof customerDetailsSchema>;
+
+export const orderNumberSchema = z
+  .string()
+  .transform((s) => {
+    let v = s.trim().toUpperCase();
+    if (/^\d+$/.test(v)) v = `BB${v}`;
+    return v;
+  })
+  .pipe(z.string().regex(/^BB\d{4,9}$/, 'Enter an order ID like BB1023'));
+
+export const lookupSchema = z.strictObject({
+  orderNumber: orderNumberSchema,
+  phone: customerPhoneSchema,
+});
+
+export type LookupOrderInput = z.input<typeof lookupSchema>;
+export type LookupOrderOutput = z.output<typeof lookupSchema>;
+
+export const publicOrderItemSchema = z.strictObject({
+  name: z.string(),
+  unitPrice: z.number().int().nonnegative(),
+  quantity: z.number().int().positive(),
+  lineTotal: z.number().int().nonnegative(),
+});
+
+export const expressWindowSchema = z.strictObject({
+  from: hhmmSchema,
+  to: hhmmSchema,
+  etaText: z.string(),
+});
+
+export const publicOrderViewSchema = z.strictObject({
+  orderNumber: z.string().regex(/^BB\d{4,9}$/),
+  status: z.enum(ORDER_STATUSES),
+  paymentMethod: z.enum(PAYMENT_METHODS),
+  paymentStatus: z.enum(PAYMENT_STATUSES),
+  deliveryMode: z.enum(DELIVERY_MODES),
+  deliveryDate: z.iso.date(),
+  locationName: z.string(),
+  slotDeliveryTime: hhmmSchema.nullable(),
+  expressWindow: expressWindowSchema.nullable(),
+  customerName: z.string(),
+  addressDetail: z.string().nullable(),
+  items: z.array(publicOrderItemSchema),
+  foodSubtotal: z.number().int().nonnegative(),
+  deliveryFee: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+  contactPhone: z
+    .string()
+    .regex(/^[6-9]\d{9}$/)
+    .nullable(),
+});
+
+export const createOrderResponseSchema = publicOrderViewSchema.extend({
+  replayed: z.boolean(),
+});
+
