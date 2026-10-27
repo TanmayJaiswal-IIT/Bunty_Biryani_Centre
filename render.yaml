@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: bbc-web
+    runtime: node
+    region: singapore
+    plan: starter
+    branch: main
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
+    preDeployCommand: pnpm db:deploy
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bbc-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: APP_ORIGIN
+        sync: false
+
+databases:
+  - name: bbc-db
+    region: singapore
+    plan: basic-256mb
+    postgresMajorVersion: "16"

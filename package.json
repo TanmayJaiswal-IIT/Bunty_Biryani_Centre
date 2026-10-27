@@ -29,6 +29,10 @@
     "admin:reset-password:prod": "node dist/node/scripts/admin-reset-password.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check:bundle": "tsx scripts/check-bundle.ts",
+    "copy:print": "tsx scripts/print-copy.ts",
+    "smoke:test": "tsx scripts/smoke-test.ts",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.test.json",
     "format": "prettier --write ."
@@ -49,6 +53,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/cookie-parser": "1.4.10",
     "@types/express": "5.0.6",

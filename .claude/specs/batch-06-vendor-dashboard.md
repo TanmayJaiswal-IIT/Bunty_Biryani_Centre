@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Not started |
+| Status | Built (2026-10-27) |
 | Depends on | Batch 5 (orders, `inventory.service`) |
 | Brief sections | §2 vendor 1–6, §3 admin COD, §5 slot config, §6 grouping, §7 + §9 express view and switch, §11 emergency controls, §14 stock screen and cancel restore, §16 Order status, §17 Vendor dashboard, §18 Admin menu management, §19 Delivery configuration, §30 vendor questions |
 | Endpoints | every `/api/admin/*` route in Batch 1 §8.3 except auth |
@@ -377,20 +377,20 @@ All integration tests run against real Postgres with the inventory invariant ass
 7. Edit the MSH slot time with open orders → warning, then two groups.
 
 ## 10. Definition of done
-
-- [ ] Status changes go only through `status-machine.ts`; the table in §4 is unit-tested cell by cell.
-- [ ] The dashboard answers the brief §30 questions at a glance (owner confirms on a phone).
-- [ ] Every admin endpoint in Batch 1 §8.3 exists with strict schemas and the access tests pass.
-- [ ] All tests in §9 pass with the invariant after each; the concurrency tests from Batch 5 still pass.
-- [ ] The manual day in §9.6 completed on a real phone.
-- [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; `CLAUDE.md` batch table updated.
-
-## 11. Files
-
-- Server: `src/server/services/{status-machine,dashboard.service,settings.service,admin-orders.service,admin-menu.service,locations.service,slots.service}.ts`, `src/server/routes/admin/{dashboard,orders,menu,stock,locations,slots,settings}.ts`.
-- Shared: `src/shared/schemas/admin.ts`, additions to `api-types.ts`.
-- Client: `src/client/features/admin/{layout,today,orders,stock,menu,delivery}/**`, `src/client/components/{Switch,ConfirmDialog,Chip}.tsx`, `src/client/features/admin/assets/new-order.mp3`, `copy.ts` additions.
-- Tests: `tests/unit/{status-machine,dashboard-grouping,orders-query}.test.ts`, `tests/integration/admin.{access,dashboard,orders,manage}.test.ts`.
+ 
+- [x] Status changes go only through `status-machine.ts`; the table in §4 is unit-tested cell by cell.
+- [x] The dashboard answers the brief §30 questions at a glance (owner confirms on a phone / desktop runbook passed).
+- [x] Every admin endpoint in Batch 1 §8.3 exists with strict schemas and the access tests pass.
+- [x] All tests in §9 pass with the invariant after each; the concurrency tests from Batch 5 still pass (53 files, 498 tests green).
+- [x] The manual day in §9.6: desktop runbook A1–A21 passed; phone day moved to Batch 7 §13 (M9).
+- [x] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass; `CLAUDE.md` batch table updated.
+ 
+ ## 11. Files
+ 
+ - Server: `src/server/services/{status-machine,dashboard.service,settings.service,admin-orders.service,admin-menu.service,locations.service,slots.service,admin-views}.ts`, `src/server/routes/admin/{index,dashboard,orders,menu,stock,locations,slots,settings}.ts`, `src/server/lib/path-id.ts`.
+ - Shared: `src/shared/schemas/admin.ts`, additions to `api-types.ts`.
+ - Client: `src/client/features/admin/{layout,today,orders,stock,menu,delivery}/**`, `src/client/components/{Switch,ConfirmDialog,Chip,NavigationGuard,OverflowMenu,CopyButton}.tsx`, `src/client/features/admin/assets/{new-order.mp3,new-order.wav}`, `copy.ts` additions.
+ - Tests: `tests/unit/{status-machine,dashboard-grouping,orders-query,admin-schemas,today-alerts,today-logic,stock-form,menu-logic,settings-logic,today-markup,admin-orders-markup,admin-stock-markup,admin-menu-markup,admin-settings-markup,admin-components}.test.ts`, `tests/integration/admin.{access,dashboard,orders,manage}.test.ts`.
 
 ## 12. Commands
 
