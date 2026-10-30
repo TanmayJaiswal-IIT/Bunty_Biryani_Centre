@@ -71,3 +71,7 @@ export function parseRemembered(raw: string | null): RememberedCustomer | null {
   const parsed = rememberedCustomerSchema.safeParse(parseJson(raw));
   return parsed.success ? parsed.data : null;
 }
+
+export function serializeRemembered(remembered: RememberedCustomer): string {
+  return JSON.stringify(remembered);
+}

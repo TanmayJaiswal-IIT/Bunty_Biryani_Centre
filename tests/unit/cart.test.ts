@@ -301,6 +301,33 @@ describe('cart storage', () => {
   });
 });
 
+describe('cartReducer applyStock (Batch 5 §7.3, §12.4)', () => {
+  it('caps items when quantity exceeds available, removes when available <= 0, without cart notices', () => {
+    const initial: CartModel = {
+      cart: cartOf([
+        [1, 5, 'Chicken Biryani'],
+        [2, 3, 'Paneer Biryani'],
+        [3, 2, 'Raita'],
+      ]),
+      notices: [],
+    };
+
+    const next = run(initial, {
+      type: 'applyStock',
+      shortItems: [
+        { menuItemId: 1, available: 2 }, // capped to 2
+        { menuItemId: 2, available: 0 }, // removed
+      ],
+    });
+
+    expect(next.cart.lines).toEqual([
+      { menuItemId: 1, quantity: 2, name: 'Chicken Biryani' },
+      { menuItemId: 3, quantity: 2, name: 'Raita' },
+    ]);
+    expect(next.notices).toEqual([]);
+  });
+});
+
 describe('lib/storage without a window', () => {
   it('never throws when localStorage is unavailable', () => {
     expect(readStorage('k')).toBeNull();
