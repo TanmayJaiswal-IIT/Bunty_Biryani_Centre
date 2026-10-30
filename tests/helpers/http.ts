@@ -19,3 +19,21 @@ export async function loginCookie(
   if (!cookie) throw new Error('login did not set a cookie');
   return cookie.split(';')[0] as string;
 }
+
+export interface AdminClient {
+  get(path: string): request.Test;
+  send(method: 'post' | 'patch' | 'put' | 'delete', path: string, body?: unknown): request.Test;
+}
+
+export async function adminClient(app: Express): Promise<AdminClient> {
+  const cookie = await loginCookie(app);
+  return {
+    get(path: string) {
+      return request(app).get(path).set('Cookie', cookie);
+    },
+    send(method: 'post' | 'patch' | 'put' | 'delete', path: string, body?: unknown) {
+      const req = request(app)[method](path).set('Cookie', cookie).set('Origin', APP_ORIGIN);
+      return body !== undefined ? req.send(body as object) : req;
+    },
+  };
+}

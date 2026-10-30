@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: bbc
+          POSTGRES_PASSWORD: bbc
+          POSTGRES_DB: bbc_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://bbc:bbc@localhost:5432/bbc_test
+      DATABASE_URL_TEST: postgresql://bbc:bbc@localhost:5432/bbc_test
+      PORT: 3100
+      APP_ORIGIN: http://localhost:3100
+      JWT_SECRET: ci-jwt-secret-0123456789-abcdefghijklmnopqrstuvwxyz
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create bbc_e2e database
+        run: |
+          PGPASSWORD=bbc psql -h localhost -U bbc -d bbc_test -c "CREATE DATABASE bbc_e2e;"
+
+      - name: Run linter
+        run: pnpm lint
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+      - name: Security review - check for raw unsafe queries
+        run: |
+          ! git grep -n "queryRawUnsafe\|executeRawUnsafe" -- ':!tests/unit/stock-writes-guard.test.ts' ':!*.md'
+
+      - name: Run unit & integration tests
+        run: pnpm test
+
+      - name: Build client & server and verify bundle budget
+        run: |
+          pnpm build
+          pnpm check:bundle
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

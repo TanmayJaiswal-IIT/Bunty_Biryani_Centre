@@ -42,6 +42,7 @@
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
+    color-scheme: light;
   }
 
   body {
@@ -52,6 +53,17 @@
     font-size: 1rem;
     line-height: 1.5;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  dialog {
+    overscroll-behavior-y: contain;
   }
 
   /* Gold fails the 3:1 non-text contrast on cream, so focus is ink everywhere. */

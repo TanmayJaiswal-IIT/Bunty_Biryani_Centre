@@ -25,6 +25,7 @@ export default defineConfig({
     outDir: '../../dist/client',
     emptyOutDir: true,
     sourcemap: true,
+    manifest: true,
     target: 'es2022',
     // Never inline assets as data: URIs: the CSP is `font-src 'self'` (Batch 1 §9.5).
     assetsInlineLimit: 0,
