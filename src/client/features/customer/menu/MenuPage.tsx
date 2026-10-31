@@ -1,12 +1,13 @@
 import { formatBusinessDate } from '@shared/time.js';
-import { useMemo } from 'react';
-import { useLocation } from 'react-router';
+import { useEffect, useMemo } from 'react';
+import { Link, useLocation } from 'react-router';
 import { Banner } from '../../../components/Banner';
 import { CustomerPage } from '../../../components/CustomerPage';
 import { EmptyState } from '../../../components/EmptyState';
 import { ErrorState } from '../../../components/ErrorState';
 import { Skeleton } from '../../../components/Skeleton';
 import { copy } from '../../../copy';
+import { prefetchCheckout } from '../../../lazy-routes';
 import { isCartEmptyState } from '../cart/cart-empty';
 import { cartView } from '../cart/cart-reducer';
 import { CartBar } from '../cart/CartBar';
@@ -52,6 +53,12 @@ export function MenuPage() {
     [cart],
   );
   const view = useMemo(() => (data ? cartView(data, cart) : null), [data, cart]);
+
+  useEffect(() => {
+    if (cart.lines.length > 0) {
+      prefetchCheckout();
+    }
+  }, [cart.lines.length]);
 
   if (!data || !view) {
     return (
@@ -134,6 +141,14 @@ export function MenuPage() {
         </ul>
       ) : null}
       <SoldOutList items={soldOut} />
+      <footer className="mt-8 mb-4 text-center">
+        <Link
+          to="/track"
+          className="text-xs font-semibold text-ink-muted underline underline-offset-2 hover:text-ink"
+        >
+          {copy.customer.order.trackOrder}
+        </Link>
+      </footer>
       <CartBar count={view.count} subtotal={view.subtotal} paused={data.ordersPaused} />
     </CustomerPage>
   );

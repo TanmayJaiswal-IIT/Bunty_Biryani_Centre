@@ -1,14 +1,20 @@
-import type { DeliverySlotOption, PublicMenu } from '@shared/api-types.js';
+import type {
+  CreateOrderInput,
+  DeliverySlotOption,
+  PublicMenu,
+  PublicMenuItem,
+} from '@shared/api-types.js';
 import type { DeliveryMode } from '@shared/enums.js';
 import { formatINR } from '@shared/money.js';
 import { computeTotals } from '@shared/pricing.js';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
 import { Banner } from '../../../components/Banner';
 import { ErrorState } from '../../../components/ErrorState';
 import { Icon } from '../../../components/Icon';
 import { Skeleton } from '../../../components/Skeleton';
 import { copy } from '../../../copy';
+import { prefetchOrder } from '../../../lazy-routes';
 import { readStorage, removeStorage, writeStorage } from '../../../lib/storage';
 import { useElapsedMinutes } from '../../../lib/use-elapsed-minutes';
 import { useInView } from '../../../lib/use-in-view';
@@ -16,6 +22,7 @@ import { CART_EMPTY_STATE } from '../cart/cart-empty';
 import { cartView } from '../cart/cart-reducer';
 import { useCart } from '../cart/CartProvider';
 import { useMenu } from '../menu/use-menu';
+import { saveRecentOrder } from '../order/recent-orders-storage';
 import {
   FIELD_ORDER,
   buildOrderRequest,
@@ -29,6 +36,7 @@ import {
   parseDraft,
   parseRemembered,
   serializeDraft,
+  serializeRemembered,
 } from './checkout-storage';
 import {
   DetailsSection,
@@ -38,8 +46,13 @@ import {
   tidyDetail,
   type DetailField,
 } from './DetailsSection';
+import {
+  parseCheckoutError,
+  type CheckoutErrorBanner,
+} from './error-handling';
 import { MethodSection } from './MethodSection';
 import { OrderSection } from './OrderSection';
+import { clearPendingOrder, ensureClientRequestId } from './pending-order';
 import { PlaceOrderBar, isTextEntry } from './PlaceOrderBar';
 import {
   NO_SELECTION,
@@ -50,16 +63,14 @@ import {
   resolveSelection,
   type Selection,
 } from './selection';
+import { SubmitErrorBanner } from './SubmitErrorBanner';
+import { submitOrder } from './submit-order';
 import { SummarySection } from './SummarySection';
 import { useDeliveryOptions, type LoadedDeliveryOptions } from './use-delivery-options';
 import { WhereWhenSection } from './WhereWhenSection';
 
 const c = copy.customer.checkout;
 const m = copy.customer.menu;
-
-// Batch 4 stub (Decision 9): a valid v4-shaped id. Batch 5 replaces it with a real id that is
-// generated once and reused on retry.
-const PLACEHOLDER_REQUEST_ID = '00000000-0000-4000-8000-000000000000';
 
 const DRAFT_DEBOUNCE_MS = 300;
 const DELIVERY_FIELDS: readonly OrderField[] = ['deliveryMode', 'slotId', 'locationId'];
@@ -111,6 +122,10 @@ interface CheckoutFormProps {
   optionsFailed: boolean;
   optionsRetrying: boolean;
   onRetryOptions: () => void;
+  onRefreshMenu: () => void;
+  onPlaced: () => void;
+  onSubmittingChange: (submitting: boolean) => void;
+  onFrozenChange: (frozen: boolean) => void;
 }
 
 function CheckoutForm({
@@ -119,12 +134,15 @@ function CheckoutForm({
   optionsFailed,
   optionsRetrying,
   onRetryOptions,
+  onRefreshMenu,
+  onPlaced,
+  onSubmittingChange,
+  onFrozenChange,
 }: CheckoutFormProps) {
-  const { cart, notices, increment, decrement, dismissNotices } = useCart();
+  const navigate = useNavigate();
+  const { cart, notices, increment, decrement, dismissNotices, clear: clearCart, applyStock } = useCart();
   const [stored] = useState(readStored);
   const [remembered, setRemembered] = useState(stored.remembered);
-  // A customer can't choose "no method", so a draft without one only saved a default: restore its
-  // details (below) but not its selection, so today's default applies again.
   const [selection, setSelection] = useState<Selection | null>(
     stored.draft?.selection.deliveryMode ? stored.draft.selection : null,
   );
@@ -134,19 +152,25 @@ function CheckoutForm({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [dirty, setDirty] = useState<ReadonlySet<DetailField>>(() => new Set());
   const [typing, setTyping] = useState(false);
-  const [notSent, setNotSent] = useState(false);
-  // The in-form Place order button. While it is fully on screen the sticky bar steps aside, so
-  // the end of the page shows one button, not two.
+  const [submitting, setSubmitting] = useState(false);
+  const [frozenRequest, setFrozenRequest] = useState<CreateOrderInput | null>(null);
+  const [submitBanner, setSubmitBanner] = useState<CheckoutErrorBanner | null>(null);
+
   const [inFormSubmit, setInFormSubmit] = useState<HTMLButtonElement | null>(null);
   const inFormSubmitVisible = useInView(inFormSubmit);
-  // Set only by a tap (submit with errors, Try Express); the effect below consumes it.
   const pendingFocus = useRef<PendingFocus | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const whereWhenRef = useRef<HTMLFieldSetElement>(null);
   const orderHeadingRef = useRef<HTMLHeadingElement>(null);
 
-  // Decision 5: the initial choice (draft, else the default) is set once, during render, when the
-  // options first arrive. Whether it is still valid is derived below, never cleared in an effect.
+  useEffect(() => {
+    onSubmittingChange(submitting);
+  }, [submitting, onSubmittingChange]);
+
+  useEffect(() => {
+    onFrozenChange(Boolean(frozenRequest));
+  }, [frozenRequest, onFrozenChange]);
+
   if (selection === null && options) setSelection(defaultSelection(remembered, options));
 
   const view = cartView(menu, cart);
@@ -164,9 +188,16 @@ function CheckoutForm({
   const elapsed = useElapsedMinutes(options?.receivedAt ?? 0);
   const nothingOpen = options ? !isBatchOpen(options) && !isExpressOpen(options) : false;
   const disabled = !options || options.ordersPaused || nothingOpen;
-  const label = options?.ordersPaused ? c.pausedButton : c.placeOrder(formatINR(totals.total));
-  // While options load, a restored method shows its list as skeletons; once they arrive, only a
-  // method that is still valid shows one.
+
+  const submitDisabled = submitting || (frozenRequest ? false : disabled);
+  const label = submitting
+    ? c.placingOrder
+    : frozenRequest
+      ? c.tryAgain
+      : options?.ordersPaused
+        ? c.pausedButton
+        : c.placeOrder(formatINR(totals.total));
+
   const whereWhenMode: DeliveryMode | null = options
     ? (resolved?.mode ?? null)
     : optionsFailed
@@ -204,32 +235,54 @@ function CheckoutForm({
     }
   });
 
+  function clearFrozenAndBanner() {
+    setFrozenRequest(null);
+    setSubmitBanner(null);
+  }
+
   function clearErrors(fields: readonly OrderField[]) {
     setErrors((prev) => withoutErrors(prev, fields));
   }
 
   function onChooseMethod(mode: DeliveryMode) {
+    clearFrozenAndBanner();
     setSelection((prev) => chooseMethod(prev ?? NO_SELECTION, mode));
     clearErrors(DELIVERY_FIELDS);
   }
 
   function onChooseSlot(slot: DeliverySlotOption) {
+    clearFrozenAndBanner();
     setSelection({ deliveryMode: 'BATCH', slotId: slot.id, locationId: slot.locationId });
     clearErrors(['slotId']);
   }
 
   function onChooseExpressLocation(locationId: number) {
+    clearFrozenAndBanner();
     setSelection({ deliveryMode: 'EXPRESS', slotId: null, locationId });
     clearErrors(['locationId']);
   }
 
   function onTryExpress(slot: DeliverySlotOption) {
+    clearFrozenAndBanner();
     setSelection({ deliveryMode: 'EXPRESS', slotId: null, locationId: slot.locationId });
     clearErrors(DELIVERY_FIELDS);
     pendingFocus.current = { expressLocationId: slot.locationId };
   }
 
+  function onTryExpressFromBanner() {
+    clearFrozenAndBanner();
+    if (selection?.locationId) {
+      setSelection({ deliveryMode: 'EXPRESS', slotId: null, locationId: selection.locationId });
+      clearErrors(DELIVERY_FIELDS);
+      pendingFocus.current = { expressLocationId: selection.locationId };
+    } else {
+      setSelection((prev) => chooseMethod(prev ?? NO_SELECTION, 'EXPRESS'));
+      clearErrors(DELIVERY_FIELDS);
+    }
+  }
+
   function onDetailChange(field: DetailField, value: string) {
+    clearFrozenAndBanner();
     setDetails((prev) => ({ ...prev, [field]: value }));
     setDirty((prev) => (prev.has(field) ? prev : new Set(prev).add(field)));
     if (errors[field]) setErrors((prev) => withError(prev, field, detailError(field, value)));
@@ -241,9 +294,13 @@ function CheckoutForm({
     if (dirty.has(field)) setErrors((prev) => withError(prev, field, detailError(field, value)));
   }
 
+  function onIncrement(item: PublicMenuItem) {
+    clearFrozenAndBanner();
+    increment(item);
+  }
+
   function onDecrement(menuItemId: number) {
-    // Removing a line removes the focused button; with other lines left, focus moves to the
-    // heading (an emptied cart redirects away instead).
+    clearFrozenAndBanner();
     const line = view.lines.find((l) => l.menuItemId === menuItemId);
     if (line?.quantity === 1 && view.lines.length > 1)
       pendingFocus.current = { orderHeading: true };
@@ -256,34 +313,133 @@ function CheckoutForm({
     setDetails(EMPTY_DETAILS);
     setDirty(new Set());
     clearErrors(DETAIL_FIELDS);
-    // "Not you? Clear details" removes itself.
+    clearFrozenAndBanner();
     pendingFocus.current = { field: 'customerName' };
   }
 
-  function onSubmit(e: FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (disabled || !selection) return;
-    const result = buildOrderRequest({
-      cartView: view,
-      selection,
-      details,
-      options,
-      clientRequestId: PLACEHOLDER_REQUEST_ID,
-    });
-    if (!result.ok) {
-      setErrors(result.errors);
-      setNotSent(false);
-      const first = FIELD_ORDER.find((field) => result.errors[field]);
-      if (first) pendingFocus.current = { field: first };
-      return;
+    if (submitting) return;
+
+    let requestToSend: CreateOrderInput;
+
+    if (frozenRequest) {
+      requestToSend = frozenRequest;
+    } else {
+      if (disabled || !selection) return;
+
+      const baseReq = {
+        deliveryMode: selection.deliveryMode!,
+        slotId: selection.deliveryMode === 'BATCH' ? selection.slotId : null,
+        locationId: selection.locationId ?? 0,
+        customerName: details.customerName,
+        customerPhone: details.customerPhone,
+        addressDetail: details.addressDetail ? details.addressDetail : null,
+        items: view.lines.map((l) => ({ menuItemId: l.menuItemId, quantity: l.quantity })),
+        expectedTotal: totals.total,
+      };
+
+      const { clientRequestId } = ensureClientRequestId(baseReq);
+
+      const result = buildOrderRequest({
+        cartView: view,
+        selection,
+        details,
+        options,
+        clientRequestId,
+      });
+
+      if (!result.ok) {
+        setErrors(result.errors);
+        const first = FIELD_ORDER.find((field) => result.errors[field]);
+        if (first) pendingFocus.current = { field: first };
+        return;
+      }
+
+      requestToSend = result.request;
     }
-    // Batch 5 replaces this branch: send `result.request`.
-    setErrors({});
-    setNotSent(true);
+
+    setSubmitting(true);
+    setSubmitBanner(null);
+
+    try {
+      const res = await submitOrder(requestToSend);
+      onPlaced();
+      saveRecentOrder({
+        orderNumber: res.orderNumber,
+        phone: requestToSend.customerPhone,
+        deliveryDate: res.deliveryDate,
+      });
+      writeStorage(
+        REMEMBERED_CUSTOMER_KEY,
+        serializeRemembered({
+          customerName: requestToSend.customerName,
+          customerPhone: requestToSend.customerPhone,
+          addressDetail: requestToSend.addressDetail ?? null,
+          deliveryMode: requestToSend.deliveryMode,
+          locationId: requestToSend.locationId,
+        }),
+      );
+      clearCart();
+      removeStorage(CHECKOUT_DRAFT_KEY, 'session');
+      clearPendingOrder();
+      void navigate(`/order/${res.orderNumber}`, {
+        replace: true,
+        state: { order: res, phone: requestToSend.customerPhone, placed: true },
+      });
+    } catch (err) {
+      setSubmitting(false);
+      const parsed = parseCheckoutError(err, options?.contactPhone);
+
+      if (parsed.isNetworkOrServer) {
+        setFrozenRequest(requestToSend);
+      } else {
+        setFrozenRequest(null);
+      }
+
+      if (parsed.newIdRequired) {
+        clearPendingOrder();
+      }
+
+      if (parsed.fieldErrors) {
+        setErrors(parsed.fieldErrors);
+        const first = FIELD_ORDER.find((field) => parsed.fieldErrors![field]);
+        if (first) pendingFocus.current = { field: first };
+      }
+
+      if (parsed.clearSlot) {
+        setSelection((prev) => (prev ? { ...prev, slotId: null } : null));
+      }
+      if (parsed.clearLocation) {
+        setSelection((prev) => (prev ? { ...prev, locationId: 0 } : null));
+      }
+      if (parsed.clearMethod) {
+        setSelection(null);
+      }
+
+      if (parsed.shortItems && parsed.shortItems.length > 0) {
+        applyStock(parsed.shortItems);
+      }
+
+      if (parsed.revalidateMenu) {
+        onRefreshMenu();
+      }
+      if (parsed.revalidateOptions) {
+        onRetryOptions();
+      }
+
+      setSubmitBanner(parsed.banner);
+    }
   }
 
   return (
     <>
+      {submitBanner && (
+        <div className="mb-4">
+          <SubmitErrorBanner banner={submitBanner} onTryExpress={onTryExpressFromBanner} />
+        </div>
+      )}
+
       {options?.ordersPaused ? (
         <Banner tone="warning" role="alert" className="mb-4">
           {c.paused}
@@ -293,11 +449,14 @@ function CheckoutForm({
           {c.nothingOpen}
         </Banner>
       ) : null}
+
       <form
         id="checkout-form"
         ref={formRef}
         noValidate
-        onSubmit={onSubmit}
+        onSubmit={(e) => {
+          void onSubmit(e);
+        }}
         onFocus={(e) => {
           if (isTextEntry(e.target)) setTyping(true);
         }}
@@ -306,61 +465,68 @@ function CheckoutForm({
         }}
         className="flex flex-col gap-8"
       >
-        <OrderSection
-          view={view}
-          items={menu.items}
-          notices={notices}
-          error={errors.items}
-          onIncrement={increment}
-          onDecrement={onDecrement}
-          headingRef={orderHeadingRef}
-          onDismissNotices={dismissNotices}
-        />
-        <MethodSection
-          options={options}
-          loadFailed={optionsFailed}
-          retrying={optionsRetrying}
-          onRetry={onRetryOptions}
-          mode={resolved?.mode ?? null}
-          expressUnavailableNotice={
-            resolved?.notices.some((n) => n.kind === 'expressUnavailable') ?? false
-          }
-          error={errors.deliveryMode}
-          onChoose={onChooseMethod}
-        />
-        {whereWhenMode ? (
-          <WhereWhenSection
-            ref={whereWhenRef}
-            mode={whereWhenMode}
-            options={options}
-            resolved={resolved}
-            elapsedMinutes={elapsed}
-            error={whereWhenMode === 'BATCH' ? errors.slotId : errors.locationId}
-            onChooseSlot={onChooseSlot}
-            onChooseExpressLocation={onChooseExpressLocation}
-            onTryExpress={onTryExpress}
+        <fieldset disabled={submitting} className="contents">
+          <OrderSection
+            view={view}
+            items={menu.items}
+            notices={notices}
+            error={errors.items}
+            onIncrement={onIncrement}
+            onDecrement={onDecrement}
+            headingRef={orderHeadingRef}
+            onDismissNotices={dismissNotices}
           />
-        ) : null}
-        <DetailsSection
-          details={details}
-          errors={errors}
-          mode={resolved?.mode ?? null}
-          canForget={remembered !== null}
-          onChange={onDetailChange}
-          onBlur={onDetailBlur}
-          onForget={onForget}
-        />
-        <SummarySection
-          totals={totals}
-          resolved={resolved}
-          expressEta={options?.express.etaText ?? ''}
-          notSent={notSent}
-          submitDisabled={disabled}
-          submitLabel={label}
-          submitRef={setInFormSubmit}
-        />
+          <MethodSection
+            options={options}
+            loadFailed={optionsFailed}
+            retrying={optionsRetrying}
+            onRetry={onRetryOptions}
+            mode={resolved?.mode ?? null}
+            expressUnavailableNotice={
+              resolved?.notices.some((n) => n.kind === 'expressUnavailable') ?? false
+            }
+            error={errors.deliveryMode}
+            onChoose={onChooseMethod}
+          />
+          {whereWhenMode ? (
+            <WhereWhenSection
+              ref={whereWhenRef}
+              mode={whereWhenMode}
+              options={options}
+              resolved={resolved}
+              elapsedMinutes={elapsed}
+              error={whereWhenMode === 'BATCH' ? errors.slotId : errors.locationId}
+              onChooseSlot={onChooseSlot}
+              onChooseExpressLocation={onChooseExpressLocation}
+              onTryExpress={onTryExpress}
+            />
+          ) : null}
+          <DetailsSection
+            details={details}
+            errors={errors}
+            mode={resolved?.mode ?? null}
+            canForget={remembered !== null}
+            onChange={onDetailChange}
+            onBlur={onDetailBlur}
+            onForget={onForget}
+          />
+          <SummarySection
+            totals={totals}
+            resolved={resolved}
+            expressEta={options?.express.etaText ?? ''}
+            submitting={submitting}
+            submitDisabled={submitDisabled}
+            submitLabel={label}
+            submitRef={setInFormSubmit}
+          />
+        </fieldset>
       </form>
-      <PlaceOrderBar hidden={typing || inFormSubmitVisible} disabled={disabled} label={label} />
+      <PlaceOrderBar
+        hidden={typing || inFormSubmitVisible}
+        disabled={submitDisabled}
+        loading={submitting}
+        label={label}
+      />
     </>
   );
 }
@@ -381,22 +547,51 @@ function CheckoutSkeleton() {
   );
 }
 
-/** `/checkout` (Batch 4 §5): one page from the cart to Place order. */
+/** `/checkout` (Batch 4 §5, Batch 5 §7): one page from the cart to Place order. */
 export function CheckoutPage() {
   const { cart } = useCart();
-  // Reconciles the cart on every successful fetch (see useMenu).
+  const [placed, setPlaced] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [frozen, setFrozen] = useState(false);
+
+  useEffect(() => {
+    prefetchOrder();
+  }, []);
+
+  // While an order is being sent or frozen for Try again, don't reconcile cart
   const {
     data: menu,
     error: menuError,
     isValidating: menuValidating,
     mutate: refreshMenu,
-  } = useMenu();
+  } = useMenu({ reconcile: !submitting && !frozen && !placed });
+
   const {
     data: options,
     error: optionsError,
     isValidating: optionsValidating,
     mutate: refreshOptions,
   } = useDeliveryOptions(30_000);
+
+  // If already placed and cart is empty, show skeleton until route navigation completes
+  if (placed) {
+    return (
+      <>
+        <header className="bg-sun">
+          <div className="mx-auto flex max-w-120 items-center justify-between gap-3 px-2">
+            <span className="inline-flex min-h-12 items-center gap-1 px-2 font-semibold">
+              <Icon name="chevron-left" />
+              {c.back}
+            </span>
+            <h1 className="display px-2 text-lg">{c.title}</h1>
+          </div>
+        </header>
+        <main className="mx-auto max-w-120 px-4 pt-4 pb-20">
+          <CheckoutSkeleton />
+        </main>
+      </>
+    );
+  }
 
   // Arriving empty, removing the last line, reconcile emptying it, another tab emptying it (§5.2).
   if (cart.lines.length === 0) return <Navigate to="/" replace state={CART_EMPTY_STATE} />;
@@ -420,6 +615,10 @@ export function CheckoutPage() {
             optionsFailed={!options && Boolean(optionsError)}
             optionsRetrying={optionsValidating}
             onRetryOptions={() => void refreshOptions()}
+            onRefreshMenu={() => void refreshMenu()}
+            onPlaced={() => setPlaced(true)}
+            onSubmittingChange={setSubmitting}
+            onFrozenChange={setFrozen}
           />
         ) : menuError ? (
           <ErrorState
@@ -435,3 +634,5 @@ export function CheckoutPage() {
     </>
   );
 }
+
+export default CheckoutPage;

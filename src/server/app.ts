@@ -2,13 +2,20 @@ import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
-import { LOGIN_RATE_LIMIT, type RateLimitRule } from '../shared/limits.js';
+import {
+  LOGIN_RATE_LIMIT,
+  LOOKUP_RATE_LIMIT,
+  ORDER_RATE_LIMIT,
+  type RateLimitRule,
+} from '../shared/limits.js';
 import { loginSchema } from '../shared/schemas/auth.js';
+import { createOrderSchema, lookupSchema } from '../shared/schemas/order.js';
 import type { Clock } from '../shared/time.js';
 import type { Config } from './config.js';
 import type { PrismaClient } from './db.js';
 import { AppError } from './lib/app-error.js';
 import { createLogger, type Logger } from './lib/logger.js';
+import { canonicalHost } from './middleware/canonical-host.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { originCheck } from './middleware/origin-check.js';
 import { createLimiter } from './middleware/rate-limits.js';
@@ -16,13 +23,17 @@ import { requestLog } from './middleware/request-log.js';
 import { requireAdmin } from './middleware/require-admin.js';
 import { validate } from './middleware/validate.js';
 import { adminAuthHandlers } from './routes/admin/auth.js';
+import { mountAdminRoutes } from './routes/admin/index.js';
 import { deliveryOptionsHandler } from './routes/delivery.js';
 import { healthHandler } from './routes/health.js';
 import { menuHandler } from './routes/menu.js';
+import { lookupHandler, ordersHandler } from './routes/orders.js';
 import { mountClient } from './static.js';
 
 export interface AppLimits {
   login: RateLimitRule;
+  order: RateLimitRule;
+  lookup: RateLimitRule;
 }
 
 export interface AppDeps {
@@ -76,6 +87,8 @@ export function createApp({
     }),
   );
 
+  app.use(canonicalHost(config.appOrigin, config.isProduction));
+
   const api = express.Router();
   api.use((_req, res, next) => {
     res.set('Cache-Control', 'no-store');
@@ -85,6 +98,22 @@ export function createApp({
   api.get('/health', healthHandler(prisma));
   api.get('/menu', menuHandler(prisma, clock));
   api.get('/delivery-options', deliveryOptionsHandler(prisma, clock));
+
+  const orderLimiter = createLimiter(limits.order ?? ORDER_RATE_LIMIT);
+  const lookupLimiter = createLimiter(limits.lookup ?? LOOKUP_RATE_LIMIT, { failedOnly: true });
+
+  api.post(
+    '/orders',
+    orderLimiter,
+    validate({ body: createOrderSchema }),
+    ordersHandler({ prisma, clock, logger }),
+  );
+  api.post(
+    '/orders/lookup',
+    lookupLimiter,
+    validate({ body: lookupSchema }),
+    lookupHandler(prisma),
+  );
 
   const auth = adminAuthHandlers({
     prisma,
@@ -116,6 +145,7 @@ export function createApp({
   );
   admin.post('/logout', auth.logoutHandler);
   admin.get('/me', auth.meHandler);
+  mountAdminRoutes(admin, { prisma, clock });
   api.use('/admin', admin);
 
   api.use((_req, _res, next) => next(new AppError('NOT_FOUND', 'Not found.')));

@@ -1,0 +1,12 @@
+node_modules
+.venv
+.git
+.github
+.env
+.env.test
+.env.e2e
+dist
+playwright-report
+test-results
+coverage
+*.log

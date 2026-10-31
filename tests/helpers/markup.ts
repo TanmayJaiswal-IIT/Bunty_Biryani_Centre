@@ -62,3 +62,24 @@ export function withWindowStorage<T>(
     vi.unstubAllGlobals();
   }
 }
+
+export function withThrowingStorage<T>(fn: () => T): T {
+  vi.stubGlobal('window', {
+    localStorage: {
+      getItem: () => {
+        throw new Error('Storage blocked');
+      },
+      setItem: () => {
+        throw new Error('Storage blocked');
+      },
+      removeItem: () => {
+        throw new Error('Storage blocked');
+      },
+    },
+  });
+  try {
+    return fn();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}

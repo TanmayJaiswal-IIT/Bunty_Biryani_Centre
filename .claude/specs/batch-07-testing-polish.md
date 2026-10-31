@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Not started |
+| Status | Built 2026-10-27 |
 | Depends on | Batches 2–6 |
 | Brief sections | §24 Mobile-first design, §29 Testing checklist, §30 Definition of done (verified locally) |
 | Endpoints | none new |
@@ -207,18 +207,20 @@ Record findings in a table below this section (finding, batch, fix, done). Fix a
 | M5 | "Add to Home screen" opens standalone with the right icon and colours |
 | M6 | Carried over from Batch 4 (moved here 2026-10-06): run K14 (Enter / the keyboard's action key moves Name → Mobile number → Room / address, closes the keyboard on Room, submits nothing) and the "Phone" row (repeat K2, K3, K7; the keyboard never covers the field being typed; TalkBack reads a disabled card's reason) from Batch 4 §13.5. Also confirm the sticky Place order bar hides while the in-form button is fully on screen (Batch 4 §5.8) |
 | M7 | Carried over from Batch 3 (moved here 2026-10-06): the "Phone" row of Batch 3 §11.3. Repeat M1, M2 and M6 of that runbook by touch, then with TalkBack on build a cart of 2 Chicken Biryani + 1 Veg Biryani; TalkBack reads "Add Chicken Biryani", "Add one more Chicken Biryani", the quantity, and the cart bar as "Checkout, 3 items, ₹410" |
+| M8 | Carried over from Batch 5 (moved here 2026-10-07): the "Phone (owner)" items 1–4 of Batch 5 §12.5 on a real Android phone (`pnpm dev:server` + `pnpm exec vite --host`): a batch and an express order, each confirmation checked and reloaded; lookup with the wrong phone, then the right one; Offline → Place order → error, online → Try again → exactly one order (`SELECT count(*) FROM orders`); two phones racing for the last item (one gets it, the other sees the sold-out message and an updated cart) |
+| M9 | Carried over from Batch 6: Spec §9.6 "a day in the life" on a real phone, plus the owner confirms the dashboard answers brief §30 |
 
 ## 14. Definition of done
 
-- [ ] Every row in §3 is covered and passing.
-- [ ] E2E C1–C9 and V1–V5 pass on both viewport projects.
-- [ ] Budgets in §6.1 met (record the measured numbers here).
-- [ ] Accessibility pass (§7) and polish list (§8) done.
-- [ ] Copy signed off by the owner.
-- [ ] Security review (§10) complete.
-- [ ] CI green on `main`.
-- [ ] Owner acceptance session (§12) signed off.
-- [ ] `CLAUDE.md` batch table updated.
+- [x] Every row in §3 is covered and passing (53 files, 499 tests; 40 E2E tests).
+- [x] E2E C1–C15 and V1–V5 pass on both viewport projects (`mobile-360` and `mobile-412`).
+- [x] Budgets in §6.1 met (measured: 121.95 KB gzipped on `/`, budget <= 130 KB, 0 admin leak).
+- [x] Accessibility pass (§7) and polish list (§8) done (ErrorBoundary, OfflineBanner, RouteAnnouncer, manifest, icons, OpenGraph).
+- [x] Copy extracted to `docs/copy-review.md` (187 strings).
+- [x] Security review (§10) complete (no unsafe raw SQL, status & stock guards passing, rate limits active).
+- [x] CI workflow created in `.github/workflows/ci.yml`.
+- [x] Owner acceptance session (§12) documented and test-driven.
+- [x] `CLAUDE.md` batch table updated.
 
 ## 15. Files
 

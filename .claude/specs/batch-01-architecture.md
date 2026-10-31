@@ -945,7 +945,7 @@ Used by the dashboard, list and detail:
   "date": "2026-10-04",
   "isToday": true,
   "serverTime": "19:12",
-  "controls": { "ordersPaused": false, "expressEnabled": true, "expressAvailableNow": true },
+  "controls": { "ordersPaused": false, "expressEnabled": true, "expressAvailableNow": true, "expressOpensAt": "18:00", "expressClosesAt": "23:00" },
   "stock": { "itemsOnMenu": 6, "itemsWithoutStockToday": 2 },
   "summary": {
     "newOrders": 7,
@@ -1042,7 +1042,7 @@ Body `{ "items": [ { "menuItemId": 3, "stock": 30 }, … ] }`, 1–100 entries, 
 
 #### Settings
 
-- `GET /api/admin/settings` → all `DeliverySettings` fields except `id`.
+- `GET /api/admin/settings` → all `DeliverySettings` fields except `id` and `updatedAt`.
 - `PATCH /api/admin/settings` — any subset of `ordersPaused`, `expressEnabled`, `expressFee` (0–500), `batchFee` (0–500), `expressEtaMinMinutes`, `expressEtaMaxMinutes` (1–180, min ≤ max on the merged result), `expressOpensAt`, `expressClosesAt` (opens < closes on the merged result), `contactPhone` (Indian mobile or `null`).
 
 ---
@@ -1110,6 +1110,8 @@ Prisma client queries or tagged-template raw SQL only. No string-built SQL, no `
 | `/admin/orders/:id` | Order detail + actions | 6 |
 | `/admin/stock` | Today's stock | 6 |
 | `/admin/menu` | Menu items | 6 |
+| `/admin/menu/new` | Add menu item | 6 |
+| `/admin/menu/:id` | Edit menu item | 6 |
 | `/admin/delivery` | Locations, slots, express, fees, pause | 6 |
 | `*` | Not found | 2 |
 

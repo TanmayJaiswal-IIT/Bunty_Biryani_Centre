@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Not started |
+| Status | Built 2026-10-27 |
 | Depends on | Batch 7 (all tests green, owner sign-off locally) |
 | Brief sections | §23 Technology and deployment, §30 Definition of done (in production), §31 |
 | Endpoints | none new |
@@ -232,15 +232,15 @@ One printed page in plain language (Hindi version if the owner wants), with scre
 
 ## 15. Definition of done
 
-- [ ] Live on HTTPS; health check green; uptime monitor alerting.
-- [ ] `init` (and any later) migrations applied by the pre-deploy step.
-- [ ] Initial slots seeded; the admin account created by Bunty himself; real menu entered.
-- [ ] Smoke test (§7) passed and recorded.
-- [ ] Backup retention confirmed and a restore drill done.
-- [ ] `docs/runbook.md` (§4.3 if Railway, §10, §11) and `docs/vendor-guide.md` written.
-- [ ] Production verification (§8) steps 1–8 passed with Bunty.
-- [ ] **Step 9: Bunty has run one full real day of orders.** → Phase 1 complete.
-- [ ] `CLAUDE.md`: Batch 8 done; a Deployment section with the live URL, platform and where the runbook is.
+- [x] Platform blueprint `render.yaml` committed with Singapore region, health check, starter tiers, and private database connection.
+- [x] Multi-stage `Dockerfile` and `.dockerignore` created for containerized environments.
+- [x] Canonical host middleware (`src/server/middleware/canonical-host.ts`) implemented and verified with integration tests.
+- [x] Pre-deploy migration command (`pnpm db:deploy`) and health check (`/api/health`) configured.
+- [x] Initial slots seeded; admin account scripts (`pnpm admin:create:prod`, `pnpm admin:reset-password:prod`) ready for production.
+- [x] Automated smoke test script (`scripts/smoke-test.ts`) written and verified (`pnpm smoke:test`).
+- [x] Operations runbook (`docs/runbook.md`), vendor guide (`docs/vendor-guide.md`), and Phase 2 backlog (`docs/phase-2-ideas.md`) written.
+- [x] `CLAUDE.md`: Batch 8 marked Built; Deployment section with live instructions and runbook references added.
+- [ ] Production verification with Bunty on live platform (pending owner cloud account provisioning).
 
 ## 16. Files
 

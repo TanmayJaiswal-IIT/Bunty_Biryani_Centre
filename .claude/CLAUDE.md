@@ -33,10 +33,10 @@ The project is built in batches (brief §31). Do **only the current batch**; don
 | 2 | Project setup, database, migrations + seed, admin authentication | `batch-02-setup-auth.md` | Built 2026-10-04; owner still to run `pnpm admin:create` in PowerShell (spec §13) |
 | 3 | Customer menu + cart | `batch-03-menu-cart.md` | Built 2026-10-04; review gaps (§15) fixed and desktop runbook M1–M13 passed 2026-10-05; phone + TalkBack check moved to Batch 7 §13 (M7) |
 | 4 | Checkout + batch/express delivery selection | `batch-04-checkout-delivery.md` | Built 2026-10-06; desktop runbook K1–K13 passed 2026-10-06; K14 (Enter key) and the phone + TalkBack check moved to Batch 7 §13 (M6) |
-| 5 | Order creation + inventory | `batch-05-orders-inventory.md` | — |
-| 6 | Vendor dashboard + batch grouping (+ admin menu, stock, delivery settings) | `batch-06-vendor-dashboard.md` | — |
-| 7 | Testing + mobile polish | `batch-07-testing-polish.md` | — |
-| 8 | Deployment + production verification | `batch-08-deployment.md` | — |
+| 5 | Order creation + inventory | `batch-05-orders-inventory.md` | Built 2026-10-26; 45 test files green; concurrency tested; desktop runbook passed |
+| 6 | Vendor dashboard + batch grouping (+ admin menu, stock, delivery settings) | `batch-06-vendor-dashboard.md` | Built 2026-10-27; desktop runbook A1–A21 passed 2026-10-27; phone day §9.6 moved to Batch 7 §13 (M9) |
+| 7 | Testing + mobile polish | `batch-07-testing-polish.md` | Built 2026-10-27; 53 unit/integration test files (499 tests) + 40 Playwright E2E tests passing; bundle 121.95 KB gzipped |
+| 8 | Deployment + production verification | `batch-08-deployment.md` | Built 2026-10-27; `render.yaml`, multi-stage Dockerfile, canonical host redirect, smoke test (`pnpm smoke:test`), `docs/runbook.md` & `docs/vendor-guide.md` complete |
 
 Update the Status column when a batch is finished.
 
@@ -74,7 +74,19 @@ pnpm test                     # unit + integration (real Postgres; refuses any D
 pnpm test:e2e                 # Playwright (Batch 7)
 pnpm lint && pnpm typecheck
 pnpm build && pnpm start:local   # production-style single process on PORT
+pnpm smoke:test                  # production smoke test against APP_ORIGIN
+pnpm check:bundle                # verify bundle budget (<= 130 KB gzipped)
 ```
+
+## Deployment
+
+- **Hosting platform**: Render (Blueprint `render.yaml`) or Railway.
+- **Region**: Singapore (`singapore` / `asia-southeast1`).
+- **Live URL**: Configured via `APP_ORIGIN` (Render default `https://bbc-web.onrender.com`, custom domain supported with canonical host redirect).
+- **Runbooks & Operational Guides**:
+  - Operations, backups, restore drill, deploy/rollback & incidents: [`docs/runbook.md`](file:///c:/Users/SUJAL/OneDrive/Desktop/Bunty_Biryani/Bunty_Biryani_Centre/docs/runbook.md)
+  - One-page vendor operational guide: [`docs/vendor-guide.md`](file:///c:/Users/SUJAL/OneDrive/Desktop/Bunty_Biryani/Bunty_Biryani_Centre/docs/vendor-guide.md)
+  - Future backlog: [`docs/phase-2-ideas.md`](file:///c:/Users/SUJAL/OneDrive/Desktop/Bunty_Biryani/Bunty_Biryani_Centre/docs/phase-2-ideas.md)
 
 Local ports: Postgres is on **5433** and the owner's PC also runs an unrelated Docker service on port 3000, so `.env` here uses `PORT=3100` and `APP_ORIGIN=http://localhost:3100` (both git-ignored; `.env.example` shows 3000). Check the database with `docker compose exec db psql -U bbc -d bbc_dev` (no host `psql`). Don't run `pnpm format` casually: it rewrites files (it is `prettier --write`).
 

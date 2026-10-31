@@ -1,9 +1,10 @@
 // Development data: sample menu stocked for today, plus the initial locations and slots.
 // Never runs in production. Wipes orders, order items and menu items first.
+import { resolve } from 'node:path';
 import { loadDatabaseUrl } from '../src/server/config.js';
 import { createPrisma, type PrismaClient } from '../src/server/db.js';
 import { createClock } from '../src/server/lib/clock.js';
-import { toDbDate } from '../src/server/lib/db-date.js';
+import { setTodayStock } from '../src/server/services/inventory.service.js';
 import { nowIST, type Clock } from '../src/shared/time.js';
 import { seedInitial } from './seed-initial.js';
 
@@ -21,7 +22,6 @@ export async function seedDev(prisma: PrismaClient, clock: Clock = createClock()
   if (process.env.NODE_ENV === 'production') {
     throw new Error('seed-dev refuses to run when NODE_ENV=production.');
   }
-  const today = toDbDate(nowIST(clock).date);
 
   await prisma.$transaction(async (tx) => {
     await tx.orderItem.deleteMany();
@@ -32,26 +32,31 @@ export async function seedDev(prisma: PrismaClient, clock: Clock = createClock()
 
   await seedInitial(prisma);
 
+  const stockEntries: { menuItemId: number; stock: number }[] = [];
   for (const [sortOrder, item] of SAMPLE_ITEMS.entries()) {
-    // This is the one place outside inventory.service.ts allowed to write stock fields
-    // directly; Batch 5 rewrites it to use setTodayStock (Batch 2 §5.2).
-    await prisma.menuItem.create({
+    const created = await prisma.menuItem.create({
       data: {
         name: item.name,
         description: item.description,
         price: item.price,
         sortOrder,
         isAvailable: item.stock !== null,
-        ...(item.stock !== null
-          ? { dailyStock: item.stock, stockRemaining: item.stock, stockDate: today }
-          : {}),
       },
     });
+    if (item.stock !== null) {
+      stockEntries.push({ menuItemId: created.id, stock: item.stock });
+    }
   }
+
+  await prisma.$transaction((tx) => setTodayStock(tx, nowIST(clock).date, stockEntries));
   console.log(`created  ${SAMPLE_ITEMS.length} sample menu items (stocked for today)`);
 }
 
-if (import.meta.main) {
+const isMain =
+  Boolean(import.meta.main) ||
+  (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1]));
+
+if (isMain) {
   // Check before connecting to anything.
   if (process.env.NODE_ENV === 'production') {
     console.error('seed-dev refuses to run when NODE_ENV=production.');

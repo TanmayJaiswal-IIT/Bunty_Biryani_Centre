@@ -1,5 +1,6 @@
 // Initial data: the two locations and their daily slots (brief §5). Safe to run in production,
 // and safe to run twice: it only creates what is missing and never changes an existing row.
+import { resolve } from 'node:path';
 import { loadDatabaseUrl } from '../src/server/config.js';
 import { createPrisma, type PrismaClient } from '../src/server/db.js';
 
@@ -55,7 +56,11 @@ export async function seedInitial(
   return result;
 }
 
-if (import.meta.main) {
+const isMain =
+  Boolean(import.meta.main) ||
+  (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1]));
+
+if (isMain) {
   const prisma = createPrisma(loadDatabaseUrl(process.env));
   try {
     await seedInitial(prisma);
